@@ -22,7 +22,7 @@
 
 | Phase | Step | Item | Status |
 |-------|------|------|:------:|
-| 0 | 0.1 | Environment + dependencies installed | ⬜ |
+| 0 | 0.1 | Environment + dependencies installed | ✅ |
 | 0 | 0.2 | `app/tools/llm.py` (Gemini dev client) | ✅ |
 | 1 | 1.1 | `app/tools/vector_store.py` | ⬜ |
 | 1 | 1.2 | `scripts/seed_vector_store.py` | ⬜ |

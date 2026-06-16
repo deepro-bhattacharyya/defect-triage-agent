@@ -425,5 +425,3 @@ LANGCHAIN_TRACING_V2=true
 - [Jira REST API v3](https://developer.atlassian.com/cloud/jira/platform/rest/v3/)
 - [GitHub Issues API](https://docs.github.com/en/rest/issues)
 - [ChromaDB Documentation](https://docs.trychroma.com/)
-#   d e f e c t - t r i a g e - a g e n t  
- 
