@@ -28,8 +28,8 @@
 | 1 | 1.2 | `scripts/seed_vector_store.py` | ✅ |
 | 2 | 2.1 | `app/agent/nodes/intake.py` | ✅ |
 | 2 | 2.2 | `app/agent/nodes/duplicate.py` | ✅ |
-| 3 | 3.1 | `app/agent/nodes/analyze.py` | ⬜ |
-| 3 | 3.2 | `app/agent/nodes/prioritize.py` | ⬜ |
+| 3 | 3.1 | `app/agent/nodes/analyze.py` | ✅ |
+| 3 | 3.2 | `app/agent/nodes/prioritize.py` | ✅ |
 | 4 | 4.1 | `app/agent/nodes/assign.py` | ⬜ |
 | 4 | 4.2 | `escalate.py`, `flag_dup.py`, `notify.py` + tool stubs | ⬜ |
 | 5 | 5.1 | `app/agent/graph.py` | ⬜ |
@@ -53,14 +53,14 @@ Copy-Item .env.example .env   # then open .env and paste real ANTHROPIC_API_KEY 
 **Done when:** `pip list` shows langgraph, langchain-google-genai, chromadb, fastapi,
 pytest; `.env` exists with at least the `GOOGLE_API_KEY` (local-dev LLM) and `OPENAI_API_KEY`.
 
-> **LLM note:** local dev/testing runs on **Google Gemini 1.5 Flash** (key: `GOOGLE_API_KEY`);
+> **LLM note:** local dev/testing runs on **Google Gemini 2.5 Flash** (key: `GOOGLE_API_KEY`);
 > **production** uses **Claude Sonnet 4.6**. The provider is isolated in `app/tools/llm.py`,
 > so nodes never change when you swap. You can build and unit-test almost everything
 > *without* real keys (tests mock the LLM). You only need real keys for the seed script and
 > the live integration tests.
 
 ### Step 0.2 — LLM client  →  `app/tools/llm.py`  ✅ already created
-The shared chat-model client exposing `get_llm()`. Currently wired to Gemini 1.5 Flash
+The shared chat-model client exposing `get_llm()`. Currently wired to Gemini 2.5 Flash
 for local dev (reads `GOOGLE_API_KEY`); swap to `ChatAnthropic(claude-sonnet-4-6)` here for
 production. Nodes import `get_llm()` and never reference a provider directly.
 
@@ -172,7 +172,7 @@ output, defensive parsing, rule-based override and fallback (Explained §2.1, §
 
 ### Step 3.1 — Analyze node  →  `app/agent/nodes/analyze.py`
 `analyze_defect`: build multimodal content (text block first, then each base64 image),
-call the shared client via `get_llm()` from `app/tools/llm.py` (Gemini 1.5 Flash in dev,
+call the shared client via `get_llm()` from `app/tools/llm.py` (Gemini 2.5 Flash in dev,
 Claude Sonnet 4.6 in prod), parse **strict JSON** for `category`/`component`/`root_cause`.
 Add the regression note when `is_regression` is set. Wrap parsing in try/except.
 
@@ -198,6 +198,19 @@ to the rule-based classifier.
 **Test / Done when:** unit tests confirm: normal bug gets the LLM's rating; a
 "payment service down… all users" report is forced to CRITICAL even if the mock LLM
 says LOW; LLM failure still yields a valid severity via the rule path.
+
+> **Status (current):** ✅ Phase 3 complete. `analyze.py` (multimodal, defensive JSON via
+> `app/tools/parsing.py`, graceful fallback on parse failure) + `prioritize.py` (LLM
+> severity → derived priority, deterministic CRITICAL keyword override, rule-based fallback
+> on LLM failure). **36 offline unit tests pass** (16 new: 6 analyze, 10 prioritize) + ruff clean.
+>
+> ✅ **Verified LIVE on Gemini** (`gemini-2.5-flash`): text analysis, multimodal analysis
+> (image block accepted), CRITICAL and LOW prioritization all correct.
+>
+> 📌 **Two fixes made while building:** (1) dev LLM model is **`gemini-2.5-flash`**
+> (`gemini-1.5-flash` is retired/unavailable on current keys); (2) image blocks use
+> LangChain's data-URI `image_url` format (the plan's Anthropic `source`/`base64` block is
+> provider-specific). Also disabled LangSmith tracing by default (no key → 401 noise).
 
 ---
 

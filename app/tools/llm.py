@@ -5,8 +5,8 @@ one shared `get_llm()` instead of constructing a client each. Keeping it behind
 this tools layer means swapping providers/models touches only this file.
 
 NOTE: Production uses Anthropic Claude Sonnet 4.6 (claude-sonnet-4-6). For local
-development and testing this is currently wired to Google Gemini 1.5 Flash, which
-is cheaper/faster for iteration. The model is multimodal (text + base64 images),
+development and testing this is wired to Google Gemini 2.5 Flash, which is
+cheaper/faster for iteration. The model is multimodal (text + base64 images),
 matching how analyze_defect builds its content blocks.
 """
 
@@ -16,9 +16,10 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 
 from app.tools.certs import configure_corporate_tls
 
-# Gemini 1.5 Flash — local dev / testing only. Swap back to ChatAnthropic
+# Gemini 2.5 Flash — local dev / testing only. Swap back to ChatAnthropic
 # (claude-sonnet-4-6) for production. Key comes from the GOOGLE_API_KEY env var.
-DEV_MODEL = "gemini-1.5-flash"
+# (gemini-1.5-flash is retired/unavailable on current API keys.)
+DEV_MODEL = "gemini-2.5-flash"
 
 
 def get_llm(temperature: float = 0.0) -> ChatGoogleGenerativeAI:

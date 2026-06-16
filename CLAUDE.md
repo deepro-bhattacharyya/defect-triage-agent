@@ -86,7 +86,7 @@ START → intake_defect → check_duplicate → ┌─ DUPLICATE  → flag_dupli
 
 - Python 3.11+
 - LangGraph 1.0+ (`StateGraph`, `RetryPolicy`)
-- LLM: Gemini 1.5 Flash (dev) / Claude Sonnet 4.6 (prod)
+- LLM: Gemini 2.5 Flash (dev) / Claude Sonnet 4.6 (prod)
 - Embeddings: Gemini `gemini-embedding-001` (3072-dim). POC is Gemini-only; OpenAI not used.
 - Vector store: ChromaDB (local dev) / Pinecone (cloud)
 - API: FastAPI + uvicorn

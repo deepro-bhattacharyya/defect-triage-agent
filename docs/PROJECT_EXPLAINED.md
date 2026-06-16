@@ -226,7 +226,7 @@ real LLM is called.
 ### Why each technology was chosen
 - **LangGraph** — gives us the flowchart-you-can-run model, plus built-in retries
   (`RetryPolicy`) for the flaky LLM steps.
-- **Claude Sonnet 4.6 (prod) / Gemini 1.5 Flash (dev)** — big context window (handles
+- **Claude Sonnet 4.6 (prod) / Gemini 2.5 Flash (dev)** — big context window (handles
   giant stack traces), reliable JSON output, reads images, cost-effective. The LLM client
   is isolated in `app/tools/llm.py`, so dev runs on Gemini and prod on Claude without
   touching any node. Set `GOOGLE_API_KEY` for the Gemini dev client.

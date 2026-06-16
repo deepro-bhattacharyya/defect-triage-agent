@@ -26,7 +26,7 @@ All commands run from the `defect-triage-agent/` directory (the one containing
   [Troubleshooting](#troubleshooting).)
 - **git** — to clone the repository.
 - **API keys** — two are used at runtime:
-  - **`GOOGLE_API_KEY`** — Google Gemini 1.5 Flash, the **local-dev LLM** (analyze
+  - **`GOOGLE_API_KEY`** — Google Gemini 2.5 Flash, the **local-dev LLM** (analyze
     + prioritize nodes). Get one at <https://aistudio.google.com/apikey>.
     *(Production swaps to Claude Sonnet 4.6 — see [CLAUDE.md](CLAUDE.md).)*
   - **Embeddings** — for duplicate/regression detection, also Gemini
