@@ -149,6 +149,12 @@ Paste these prompts in order. Each maps to a step in the build order in `CLAUDE.
 > Run the full test suite, fix failures, and report coverage against the plan's targets
 > (severity ≥90%, duplicate precision ≥95%, assignment ≥85%, latency <10s).
 
+**Step 13 — frontend (optional, beyond original v1 scope)**
+> Build a React + Vite UI in `frontend/` to submit a defect and view the triage result, and
+> serve it from the FastAPI backend. Keep it a thin client over `POST /triage`.
+
+(This repo already includes that frontend — see `frontend/README.md`.)
+
 Tip: after each step, commit (`git add -A && git commit -m "..."`) so you can roll back.
 
 ---
@@ -181,3 +187,7 @@ curl -X POST localhost:8000/triage \
 ```
 
 You should see the defect routed, classified, and the triage_notes audit trail populated.
+
+Prefer a UI? Build the frontend (`cd frontend && npm run build`) and open
+**http://localhost:8000/** — the backend serves the React app there. Full guide:
+`frontend/README.md`.

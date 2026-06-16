@@ -207,13 +207,21 @@ defect-triage-agent/
 │   ├── tools/                ← all "talking to the outside world" lives here
 │   │   ├── llm.py            ← shared chat-model client (Gemini dev / Claude prod)
 │   │   ├── vector_store.py   ← ChromaDB wrapper (embeddings + similarity search)
+│   │   ├── certs.py          ← corporate-TLS bootstrap (trusts the proxy CA bundle)
 │   │   ├── jira_tool.py      ← (stub) update Jira tickets
-│   │   └── slack_tool.py     ← (stub) post to Slack
+│   │   ├── slack_tool.py     ← (stub) post to Slack
+│   │   ├── email_tool.py     ← (stub) send email
+│   │   └── oncall_tool.py    ← (stub) page on-call
 │   └── api/
-│       └── routes.py         ← FastAPI: the POST /triage web endpoint
+│       └── routes.py         ← FastAPI: POST /triage + serves the React UI at /
 ├── scripts/
-│   └── seed_vector_store.py  ← one-time loader: backlog JSON → vector store
+│   ├── seed_vector_store.py  ← one-time loader: backlog JSON → vector store
+│   └── evaluate.py           ← metrics runner (severity/dup/assignment/latency)
+├── frontend/                 ← React 18 + Vite UI (post-v1 addition; thin client over /triage)
+│   └── src/                  ← App.jsx, DefectForm, ResultPanel, api.js
 ├── tests/
+│   ├── unit/                 ← per-node tests (mocked LLM + store)
+│   ├── integration/          ← full graph, live (5 scenarios)
 │   └── fixtures/             ← canned test data (the 5 scenarios + the backlog)
 └── docs/                     ← you are here
 ```
@@ -234,6 +242,10 @@ real LLM is called.
   similarity search. Isolated in `app/tools/vector_store.py` (injectable embedder), so the
   swap touches one place. ⚠️ Score scales differ by model, so the match threshold (0.80
   here) is calibrated for the embedding model in use.
+- **React + Vite frontend** (`frontend/`) — a small single-page UI to submit a defect and
+  see the triaged result. It's a *thin client* over `POST /triage` (no logic of its own), so
+  the "brain vs. hands" rule still holds. Served by FastAPI at `/` in production, or via the
+  Vite dev server (with an API proxy) during development. Added beyond the original v1 scope.
 - **ChromaDB** — runs locally with zero setup for development; can swap to Pinecone in the
   cloud later without changing the node code (because it's behind the tools layer).
 - **FastAPI** — turns the graph into a web service with a `POST /triage` endpoint.
@@ -334,7 +346,9 @@ This is mostly *why* certain "extra" code exists. None of it is decoration.
 - **Mock** — a fake stand-in for a real service (LLM, Jira) used in tests.
 - **RetryPolicy** — LangGraph's built-in "try this node up to N times if it fails."
 - **Seeding** — pre-loading the vector store with the existing backlog.
-- **FastAPI / uvicorn** — the web framework / server that exposes `POST /triage`.
+- **FastAPI / uvicorn** — the web framework / server that exposes `POST /triage` (and serves the UI).
+- **Frontend (React + Vite)** — the browser UI in `frontend/` for submitting defects and viewing results; a thin client over the API.
+- **Vite proxy** — in dev, the Vite server forwards `/triage` + `/health` calls to the backend so there's no CORS.
 - **LangSmith / structlog / Sentry** — tracing / structured logging / crash reporting.
 
 ---

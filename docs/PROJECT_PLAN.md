@@ -193,12 +193,17 @@ defect-triage-agent/
 │   │   ├── slack_tool.py
 │   │   └── vector_store.py
 │   └── api/
-│       └── routes.py
+│       └── routes.py           # POST /triage + serves the React UI at /
+├── frontend/                   # React 18 + Vite UI (post-v1 addition; thin client over /triage)
 ├── tests/
 ├── .env.example
 ├── Dockerfile
 └── docker-compose.yml
 ```
+
+> **Frontend (added beyond original v1 scope):** a React + Vite single-page UI in
+> `frontend/` for submitting defects and viewing the triage result. Thin client over
+> `POST /triage`; the backend serves the built app at `/`. See `frontend/README.md`.
 
 ### Core Graph Definition
 

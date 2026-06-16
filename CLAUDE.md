@@ -92,6 +92,9 @@ START → intake_defect → check_duplicate → ┌─ DUPLICATE  → flag_dupli
 - API: FastAPI + uvicorn
 - Tracing/eval: LangSmith
 - Logging: structlog; errors: Sentry
+- Frontend: React 18 + Vite 5 in `frontend/` (added as an approved extension beyond
+  the original v1 scope; thin client over `POST /triage`). Backend serves the built
+  `frontend/dist` at `/` when present. See `frontend/README.md`.
 
 ---
 
@@ -164,6 +167,7 @@ image labels. We therefore ship hand-built fixtures for those scenarios. See
 
 - Ask before adding a new third-party dependency or changing a pinned version.
 - Never commit `.env` or any real key. `.gitignore` already covers it.
-- Don't implement out-of-scope v1 features (auto bug-fixing, test-case generation,
-  UI dashboard) — flag them as future work instead.
+- Don't implement out-of-scope v1 features (auto bug-fixing, test-case generation)
+  — flag them as future work instead. (A React UI dashboard was explicitly requested
+  and added in `frontend/`, a documented exception to the original v1 scope.)
 - After finishing a node, update the relevant checkbox/section here if the contract changes.

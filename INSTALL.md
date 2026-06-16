@@ -160,16 +160,33 @@ Expected: `Seeded 5 defect(s)...` listing DEF-101 … DEF-066.
 > (tens of MB, ~1 min). Subsequent runs are fast. Re-run this after changing the
 > backlog fixture.
 
-## 8. Run it ⏳ *pending (Phase 5)*
+## 8. Run it ✅ *working*
 
-Start the API locally and triage a defect via `POST /triage`:
+Start the API locally:
 
 ```bash
 uvicorn app.api.routes:app --reload --port 8000
 ```
 
-Then send a sample defect (one of the five scenarios in
-`tests/fixtures/sample_defects.json`) to `http://localhost:8000/triage`.
+- API docs (Swagger): `http://localhost:8000/docs`
+- Health: `http://localhost:8000/health`
+- Triage a defect: `POST http://localhost:8000/triage` with a sample defect (see
+  the five scenarios in `tests/fixtures/sample_defects.json`).
+
+## 9. Frontend (React UI) — optional
+
+A React + Vite UI lives in [frontend/](frontend/). Full detail in
+[frontend/README.md](frontend/README.md). Quick start:
+
+```bash
+cd frontend
+npm install                 # if it fails on TLS: $env:NODE_EXTRA_CA_CERTS="..\certs\corp-ca-bundle.pem"
+npm run build               # emits frontend/dist/
+```
+
+Then the backend serves the UI at **http://localhost:8000/** (it auto-mounts
+`frontend/dist` when present). For hot-reload dev instead, run `npm run dev`
+(http://localhost:5173) alongside the backend — Vite proxies the API calls.
 
 ---
 
@@ -181,7 +198,8 @@ Then send a sample defect (one of the five scenarios in
 | `RuntimeError: GOOGLE_API_KEY is not set` | You called `get_llm()` without the key. Set it in `.env`, or export a dummy value just for the import check in step 6. |
 | PowerShell: "running scripts is disabled" on activate | `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`, then re-run the activate line. |
 | `ModuleNotFoundError: app...` | Run commands from the repo root (the folder with `requirements.txt`), with the venv activated. |
-| `app/api/routes.py` not found | Expected — the API arrives in Phase 5. See [docs/HANDOFF.md](docs/HANDOFF.md). |
+| `npm install` fails with a certificate error | Corporate TLS proxy. Trust the bundle: `$env:NODE_EXTRA_CA_CERTS="..\certs\corp-ca-bundle.pem"` then retry. |
+| UI loads but triage calls fail in `npm run dev` | Make sure the backend is running on port 8000 (the Vite proxy targets it). |
 
 For the full build order and what each phase delivers, see
 [docs/HANDOFF.md](docs/HANDOFF.md).
