@@ -13,6 +13,9 @@ venv/
 # Vector store
 .chroma/
 
+# Machine-specific corporate CA bundle (exported from the OS trust store)
+certs/
+
 # Logs
 *.log
 

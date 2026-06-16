@@ -14,6 +14,8 @@ import os
 
 from langchain_google_genai import ChatGoogleGenerativeAI
 
+from app.tools.certs import configure_corporate_tls
+
 # Gemini 1.5 Flash — local dev / testing only. Swap back to ChatAnthropic
 # (claude-sonnet-4-6) for production. Key comes from the GOOGLE_API_KEY env var.
 DEV_MODEL = "gemini-1.5-flash"
@@ -25,6 +27,7 @@ def get_llm(temperature: float = 0.0) -> ChatGoogleGenerativeAI:
     Reads GOOGLE_API_KEY from the environment. temperature defaults to 0 for
     deterministic, structured-JSON-friendly output.
     """
+    configure_corporate_tls()  # trust the corporate TLS proxy if a bundle exists
     api_key = os.environ.get("GOOGLE_API_KEY")
     if not api_key:
         raise RuntimeError(

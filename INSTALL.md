@@ -29,10 +29,26 @@ All commands run from the `defect-triage-agent/` directory (the one containing
   - **`GOOGLE_API_KEY`** — Google Gemini 1.5 Flash, the **local-dev LLM** (analyze
     + prioritize nodes). Get one at <https://aistudio.google.com/apikey>.
     *(Production swaps to Claude Sonnet 4.6 — see [CLAUDE.md](CLAUDE.md).)*
-  - **`OPENAI_API_KEY`** — OpenAI `text-embedding-3-small`, used to embed defects
-    for duplicate/regression detection in the vector store.
-  - Keys are **not** needed for unit tests (they mock the LLM and the vector
-    store); they're needed to actually run the graph end-to-end.
+  - **Embeddings** — for duplicate/regression detection, also Gemini
+    (`gemini-embedding-001`, the same `GOOGLE_API_KEY`). This POC is Gemini-only;
+    OpenAI is not used (its API is blocked on the corporate network).
+  - The key is **not** needed for unit tests (they mock the LLM and the vector
+    store); it's needed to actually run the graph end-to-end.
+
+> **🏢 Corporate network with a TLS proxy?** If SDK calls fail with
+> `CERTIFICATE_VERIFY_FAILED`, export your OS root store (which trusts the proxy CA)
+> to a PEM bundle and the app will use it automatically. On Windows PowerShell:
+> ```powershell
+> New-Item -ItemType Directory -Force certs | Out-Null
+> $out = foreach ($c in Get-ChildItem Cert:\LocalMachine\Root,Cert:\CurrentUser\Root) {
+>   '-----BEGIN CERTIFICATE-----'
+>   [Convert]::ToBase64String($c.RawData,'InsertLineBreaks')
+>   '-----END CERTIFICATE-----' }
+> $out + (Get-Content (.venv\Scripts\python.exe -m certifi)) | Set-Content certs\corp-ca-bundle.pem -Encoding ascii
+> ```
+> `app/tools/certs.py` auto-detects `certs/corp-ca-bundle.pem` (gitignored). Note:
+> `api.openai.com` is *policy-blocked* (HTTP 403) on this network — a CA bundle won't
+> unblock it, which is why dev embeddings use Gemini.
 
 ## 2. Clone and enter the project
 
@@ -90,12 +106,13 @@ Copy-Item .env.example .env
 cp .env.example .env
 ```
 
-Open `.env` and fill in at least:
+Open `.env` and set the one key you need:
 
-| Variable | Why | Needed when |
-|----------|-----|-------------|
-| `GOOGLE_API_KEY` | Gemini 1.5 Flash — the dev LLM | Running analyze/prioritize for real |
-| `OPENAI_API_KEY` | `text-embedding-3-small` embeddings | Seeding the store / duplicate detection |
+| Variable | Why |
+|----------|-----|
+| `GOOGLE_API_KEY` | Gemini — the LLM **and** the embeddings | 
+
+That single key covers everything in this POC.
 
 `.env` is gitignored — never commit real keys. The other entries (Jira, Slack,
 LangSmith, Sentry, and the tunables `SIMILARITY_THRESHOLD` / `MAX_IMAGE_MB` /
@@ -126,17 +143,18 @@ pytest tests/unit -q    # offline unit tests (mocked LLM + embedder)
 pytest                  # everything (grows as phases land)
 ```
 
-## 7. Seed the vector store ✅ *built — needs `OPENAI_API_KEY` to run*
+## 7. Seed the vector store ✅ *working*
 
 Loads the existing backlog (`tests/fixtures/seed_backlog.json`, incl. open
 `DEF-101` and resolved `DEF-050`) into the local ChromaDB store so
-duplicate/regression detection has something to match against. The script and
-its offline unit tests (`tests/unit/test_vector_store.py`) are done; running it
-for real embeds via OpenAI, so set `OPENAI_API_KEY` in `.env` first.
+duplicate/regression detection has something to match against. Embeds via Gemini
+(dev) using your `GOOGLE_API_KEY`.
 
 ```bash
 python scripts/seed_vector_store.py
 ```
+
+Expected: `Seeded 5 defect(s)...` listing DEF-101 … DEF-066.
 
 > The first time ChromaDB initializes it may download a small default model
 > (tens of MB, ~1 min). Subsequent runs are fast. Re-run this after changing the

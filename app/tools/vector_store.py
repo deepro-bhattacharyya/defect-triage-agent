@@ -23,9 +23,24 @@ from dataclasses import dataclass, field
 
 import chromadb
 
+from app.tools.certs import configure_corporate_tls
+
 COLLECTION_NAME = "defect_backlog"
-EMBEDDING_MODEL = "text-embedding-3-small"
 DEFAULT_PERSIST_DIR = "./.chroma"
+
+# Embeddings: Gemini only (this POC standardizes on Google; OpenAI is blocked on
+# the corporate network). gemini-embedding-001 is 3072-dim — if you ever change
+# the model, re-seed the store (delete .chroma) since the vector size changes.
+GEMINI_EMBEDDING_MODEL = "models/gemini-embedding-001"
+
+
+def _build_default_embedder():
+    """Construct the Gemini embedder. Sets up corporate TLS first so the HTTPS
+    call verifies against the proxy's certificate."""
+    configure_corporate_tls()
+    from langchain_google_genai import GoogleGenerativeAIEmbeddings
+
+    return GoogleGenerativeAIEmbeddings(model=GEMINI_EMBEDDING_MODEL)
 
 
 @dataclass
@@ -58,11 +73,9 @@ class VectorStore:
     @property
     def embedder(self):
         if self._embedder is None:
-            # Imported lazily so unit tests that inject a fake embedder never
-            # construct a real OpenAI client (and never need OPENAI_API_KEY).
-            from langchain_openai import OpenAIEmbeddings
-
-            self._embedder = OpenAIEmbeddings(model=EMBEDDING_MODEL)
+            # Built lazily so unit tests that inject a fake embedder never
+            # construct a real provider client (and never need an API key).
+            self._embedder = _build_default_embedder()
         return self._embedder
 
     def add_defects(self, defects):

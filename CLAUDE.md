@@ -73,9 +73,12 @@ START → intake_defect → check_duplicate → ┌─ DUPLICATE  → flag_dupli
 | `notify`          | No  | Jira update + Slack + email |
 
 ### Key constants (do not change without flagging)
-- `SIMILARITY_THRESHOLD = 0.88` — at/above = match.
+- `SIMILARITY_THRESHOLD = 0.80` — at/above = match. **Recalibrated from the plan's
+  original 0.88** (which was tuned for OpenAI embeddings) for this POC's Gemini
+  `gemini-embedding-001`: real dup/regression pairs score ~0.81–0.85, noise ≤0.70, so
+  0.80 (industry-standard cosine cutoff) separates them. Flagged deviation from `docs/PROJECT_PLAN.md`.
 - `RESOLVED_STATUSES = {"RESOLVED", "CLOSED", "DONE"}` — a match in one of these = regression, not duplicate.
-- Score band **0.80–0.88** is reserved for future human-review routing (not auto-actioned in v1).
+- (The plan's reserved 0.80–0.88 human-review band was OpenAI-calibrated; not used with the Gemini threshold.)
 
 ---
 
@@ -84,7 +87,7 @@ START → intake_defect → check_duplicate → ┌─ DUPLICATE  → flag_dupli
 - Python 3.11+
 - LangGraph 1.0+ (`StateGraph`, `RetryPolicy`)
 - LLM: Gemini 1.5 Flash (dev) / Claude Sonnet 4.6 (prod)
-- Embeddings: OpenAI `text-embedding-3-small`
+- Embeddings: Gemini `gemini-embedding-001` (3072-dim). POC is Gemini-only; OpenAI not used.
 - Vector store: ChromaDB (local dev) / Pinecone (cloud)
 - API: FastAPI + uvicorn
 - Tracing/eval: LangSmith

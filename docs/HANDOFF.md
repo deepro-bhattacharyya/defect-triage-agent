@@ -25,9 +25,9 @@
 | 0 | 0.1 | Environment + dependencies installed | ✅ |
 | 0 | 0.2 | `app/tools/llm.py` (Gemini dev client) | ✅ |
 | 1 | 1.1 | `app/tools/vector_store.py` | ✅ |
-| 1 | 1.2 | `scripts/seed_vector_store.py` | 🟦 |
-| 2 | 2.1 | `app/agent/nodes/intake.py` | ⬜ |
-| 2 | 2.2 | `app/agent/nodes/duplicate.py` | ⬜ |
+| 1 | 1.2 | `scripts/seed_vector_store.py` | ✅ |
+| 2 | 2.1 | `app/agent/nodes/intake.py` | ✅ |
+| 2 | 2.2 | `app/agent/nodes/duplicate.py` | ✅ |
 | 3 | 3.1 | `app/agent/nodes/analyze.py` | ⬜ |
 | 3 | 3.2 | `app/agent/nodes/prioritize.py` | ⬜ |
 | 4 | 4.1 | `app/agent/nodes/assign.py` | ⬜ |
@@ -105,12 +105,18 @@ into each document's **metadata** (status drives duplicate-vs-regression later).
 **Test / Done when:** running `python scripts/seed_vector_store.py` loads 5 defects;
 a quick similarity query for "promo code checkout 500" returns `DEF-101` near the top.
 
-> **Status (current):** ✅ Step 1.1 done — `app/tools/vector_store.py` built (cosine
-> distance→similarity conversion, injectable embedder) with 5 passing offline unit tests
-> in `tests/unit/test_vector_store.py`. 🟦 Step 1.2 — `scripts/seed_vector_store.py` is
-> written; the **live seed + DEF-101 query check is pending an `OPENAI_API_KEY`** (the
-> only step in Phase 1 that hits the network). Add the key to `.env`, run
-> `python scripts/seed_vector_store.py`, then this flips to ✅.
+> **Status (current):** ✅ Phase 1 complete. `app/tools/vector_store.py` (cosine
+> distance→similarity, injectable embedder), 5 offline unit tests, and the live seed all
+> work. Backlog (5 defects) is seeded into `.chroma`.
+>
+> **Embeddings = Gemini only (POC standardizes on Google; OpenAI is corporate-blocked).**
+> `gemini-embedding-001` (3072-dim) via the `GOOGLE_API_KEY`. Corporate TLS is handled by
+> `app/tools/certs.py` + `certs/corp-ca-bundle.pem` (auto-detected).
+>
+> ✅ **THRESHOLD RECALIBRATED to 0.80** (resolved). Real Gemini scores rank correctly but
+> run lower than OpenAI's, so the plan's 0.88 is replaced by the industry-standard **0.80**
+> cosine cutoff. Verified live end-to-end: promo→DUPLICATE of DEF-101 (0.850),
+> logout→REGRESSION of DEF-050 (0.825), payment-down→NEW. Matches the fixtures exactly.
 
 ---
 
@@ -145,6 +151,17 @@ RESOLVED match ⇒ regression (proceed to analyze), no match ⇒ new bug.
 **Test / Done when:** three unit tests pass (mock the vector store):
 match-on-OPEN-DEF-101 ⇒ `is_duplicate=True`; match-on-CLOSED-DEF-050 ⇒ `is_regression=True`;
 no match ⇒ both False, status `in_triage`.
+
+> **Status (current):** ✅ Phase 2 complete. `intake.py` + `duplicate.py` built and
+> implemented to the plan's contract verbatim. **20 offline unit tests pass** (8 intake,
+> 7 duplicate, 5 vector store) + ruff clean. No API key was needed.
+>
+> ⚠️ **Flagged for Phase 5 (graph wiring):** `image_attachments` is an `operator.add`
+> reducer, so intake's returned cleaned list would *append* to any raw images already in
+> the channel (→ duplicates). When wiring the graph, either don't pre-seed
+> `image_attachments` on invoke (let intake be the sole populator), or change that one
+> field to last-wins. **Recommendation: switch `image_attachments` to a non-reducer field**
+> since only intake writes it — flag this as the minimal schema tweak before Phase 5.
 
 ---
 

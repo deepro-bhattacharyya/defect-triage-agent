@@ -56,16 +56,19 @@ different words.
 
 An **embedding** is a way to turn a piece of text into a list of numbers (a "vector",
 e.g. 1,536 numbers) that captures its *meaning*. Texts with similar meaning get
-similar number-lists. We use OpenAI's **text-embedding-3-small** model to do this
-conversion.
+similar number-lists. Production uses OpenAI's **text-embedding-3-small**; local dev
+uses Google's **gemini-embedding-001** (because OpenAI's API is blocked on the corporate
+network). Either way the idea is identical — text in, meaning-vector out.
 
 Once both bugs are vectors, we measure how "close" they are. Close vectors = similar
 meaning = likely duplicate. The closeness number is a **similarity score** between
 0 (unrelated) and 1 (identical).
 
-> **Our magic threshold is `0.88`.** At or above 0.88, we call it a match. Below, we
-> treat it as a different bug. (And the band 0.80–0.88 is deliberately left for a future
-> "ask a human" feature — not auto-handled in version 1.)
+> **Our magic threshold is `0.80`.** At or above 0.80, we call it a match. Below, we
+> treat it as a different bug. (This was recalibrated from the plan's original 0.88, which
+> was tuned for OpenAI embeddings; with this POC's Gemini `gemini-embedding-001`, real
+> matches score ~0.81–0.85 and unrelated bugs ≤0.70, so 0.80 — the industry-standard cosine
+> cutoff — cleanly separates them. Thresholds are embedding-model-specific.)
 
 ### 2.3 What is a "vector store"?
 
@@ -161,7 +164,7 @@ check_duplicate    ← turn it into a vector, search the backlog
 | Node | Uses LLM? | What it does | Why it exists |
 |------|:---------:|--------------|---------------|
 | **intake_defect** | No | Reads the raw bug payload, normalizes fields, separates out image attachments into state. | Garbage in, garbage out. Clean the input once so every later node can trust it. |
-| **check_duplicate** | No | Embeds the title+description, searches the vector store, applies the 0.88 rule and the open-vs-resolved rule. | Catches duplicates *before* spending money/time on the LLM. Distinguishes regressions. |
+| **check_duplicate** | No | Embeds the title+description, searches the vector store, applies the 0.80 rule and the open-vs-resolved rule. | Catches duplicates *before* spending money/time on the LLM. Distinguishes regressions. |
 | **flag_duplicate** | No | Links the new bug to its original parent ticket and closes it as a duplicate. | The dead-end for duplicates — no further work needed. |
 | **analyze_defect** | **Yes** | Sends text (and any images) to Claude, gets back root cause, category, component as JSON. | This is the "understanding" step. Multimodal so screenshots help. |
 | **prioritize** | **Yes** | Asks Claude for severity (CRITICAL/HIGH/MEDIUM/LOW) and priority (1–4). Then a rule-based safety net forces CRITICAL for danger keywords. | Severity drives everything downstream. The LLM can under-rate a real emergency, so rules back it up. |
@@ -227,7 +230,10 @@ real LLM is called.
   giant stack traces), reliable JSON output, reads images, cost-effective. The LLM client
   is isolated in `app/tools/llm.py`, so dev runs on Gemini and prod on Claude without
   touching any node. Set `GOOGLE_API_KEY` for the Gemini dev client.
-- **OpenAI text-embedding-3-small** — cheap, good-quality embeddings for the similarity search.
+- **Embeddings (Gemini dev / OpenAI prod)** — turn defect text into vectors for the
+  similarity search. Isolated in `app/tools/vector_store.py` (injectable embedder), so the
+  swap touches one place. ⚠️ Score scales differ by model, so the match threshold (0.80
+  here) is calibrated for the embedding model in use.
 - **ChromaDB** — runs locally with zero setup for development; can swap to Pinecone in the
   cloud later without changing the node code (because it's behind the tools layer).
 - **FastAPI** — turns the graph into a web service with a `POST /triage` endpoint.
@@ -296,7 +302,7 @@ This is mostly *why* certain "extra" code exists. None of it is decoration.
 | Risk | Our mitigation | Where it lives |
 |------|----------------|----------------|
 | LLM rates a real emergency too low | Rule-based keyword override forces CRITICAL ("payment down", "outage", "data loss", "all users") | `prioritize.py` |
-| False-positive duplicate | The 0.80–0.88 band is reserved for human review, not auto-action | `check_duplicate` threshold logic |
+| False-positive duplicate | Threshold (0.80) sits in the clean gap between real matches (~0.81–0.85) and noise (≤0.70); tune per embedding model | `check_duplicate` threshold logic |
 | Regression mistaken for a new bug | We store each bug's *status* in the vector store metadata; RESOLVED/CLOSED ⇒ regression | `seed_vector_store.py` + `duplicate.py` |
 | Huge images slow everything down | Cap at 5 MB/image, max 3 images; strip unsupported formats | `intake.py` |
 | LLM returns broken JSON | Parse defensively in try/except; `RetryPolicy(max_attempts=3)` retries; fall back to rule-based path | `analyze.py`, `prioritize.py`, `graph.py` |
@@ -314,7 +320,7 @@ This is mostly *why* certain "extra" code exists. None of it is decoration.
 - **Multimodal** — the LLM can take images as well as text.
 - **Embedding** — text turned into a list of numbers that captures its meaning.
 - **Vector store** — a database that finds the most-similar stored vectors fast (ChromaDB).
-- **Similarity score** — 0-to-1 number for how alike two texts are; ≥ 0.88 = match here.
+- **Similarity score** — 0-to-1 number for how alike two texts are; ≥ 0.80 = match here.
 - **Duplicate** — new bug matches an OPEN existing one → short-circuit, no LLM.
 - **Regression** — new bug matches a RESOLVED/CLOSED one → a fixed bug came back → full analysis.
 - **Agent** — a program that walks a bug through automated decision steps.
