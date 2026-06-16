@@ -118,18 +118,21 @@ python -c "from app.tools.llm import get_llm; print('llm client OK')"
 python -c "from app.agent.state import TriageState; print('state OK')"
 ```
 
-⏳ **Full test suite — pending (Phase 6).** Once the nodes and tests are built:
+**Unit tests — partially available.** The vector-store unit tests run offline
+today (no API key); more arrive per phase. Full end-to-end suite is Phase 6.
 
 ```bash
-pytest                  # all tests
-pytest tests/unit -q    # unit tests only (mocked LLM + vector store)
+pytest tests/unit -q    # offline unit tests (mocked LLM + embedder)
+pytest                  # everything (grows as phases land)
 ```
 
-## 7. Seed the vector store ⏳ *pending (Phase 1)*
+## 7. Seed the vector store ✅ *built — needs `OPENAI_API_KEY` to run*
 
 Loads the existing backlog (`tests/fixtures/seed_backlog.json`, incl. open
 `DEF-101` and resolved `DEF-050`) into the local ChromaDB store so
-duplicate/regression detection has something to match against.
+duplicate/regression detection has something to match against. The script and
+its offline unit tests (`tests/unit/test_vector_store.py`) are done; running it
+for real embeds via OpenAI, so set `OPENAI_API_KEY` in `.env` first.
 
 ```bash
 python scripts/seed_vector_store.py
@@ -160,7 +163,7 @@ Then send a sample defect (one of the five scenarios in
 | `RuntimeError: GOOGLE_API_KEY is not set` | You called `get_llm()` without the key. Set it in `.env`, or export a dummy value just for the import check in step 6. |
 | PowerShell: "running scripts is disabled" on activate | `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`, then re-run the activate line. |
 | `ModuleNotFoundError: app...` | Run commands from the repo root (the folder with `requirements.txt`), with the venv activated. |
-| `scripts/seed_vector_store.py` / `app/api/routes.py` not found | Expected — those arrive in Phases 1 and 5. See [docs/HANDOFF.md](docs/HANDOFF.md). |
+| `app/api/routes.py` not found | Expected — the API arrives in Phase 5. See [docs/HANDOFF.md](docs/HANDOFF.md). |
 
 For the full build order and what each phase delivers, see
 [docs/HANDOFF.md](docs/HANDOFF.md).

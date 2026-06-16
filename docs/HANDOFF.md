@@ -24,8 +24,8 @@
 |-------|------|------|:------:|
 | 0 | 0.1 | Environment + dependencies installed | ✅ |
 | 0 | 0.2 | `app/tools/llm.py` (Gemini dev client) | ✅ |
-| 1 | 1.1 | `app/tools/vector_store.py` | ⬜ |
-| 1 | 1.2 | `scripts/seed_vector_store.py` | ⬜ |
+| 1 | 1.1 | `app/tools/vector_store.py` | ✅ |
+| 1 | 1.2 | `scripts/seed_vector_store.py` | 🟦 |
 | 2 | 2.1 | `app/agent/nodes/intake.py` | ⬜ |
 | 2 | 2.2 | `app/agent/nodes/duplicate.py` | ⬜ |
 | 3 | 3.1 | `app/agent/nodes/analyze.py` | ⬜ |
@@ -104,6 +104,13 @@ into each document's **metadata** (status drives duplicate-vs-regression later).
 
 **Test / Done when:** running `python scripts/seed_vector_store.py` loads 5 defects;
 a quick similarity query for "promo code checkout 500" returns `DEF-101` near the top.
+
+> **Status (current):** ✅ Step 1.1 done — `app/tools/vector_store.py` built (cosine
+> distance→similarity conversion, injectable embedder) with 5 passing offline unit tests
+> in `tests/unit/test_vector_store.py`. 🟦 Step 1.2 — `scripts/seed_vector_store.py` is
+> written; the **live seed + DEF-101 query check is pending an `OPENAI_API_KEY`** (the
+> only step in Phase 1 that hits the network). Add the key to `.env`, run
+> `python scripts/seed_vector_store.py`, then this flips to ✅.
 
 ---
 
