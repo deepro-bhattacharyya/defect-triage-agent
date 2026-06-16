@@ -30,8 +30,8 @@
 | 2 | 2.2 | `app/agent/nodes/duplicate.py` | ✅ |
 | 3 | 3.1 | `app/agent/nodes/analyze.py` | ✅ |
 | 3 | 3.2 | `app/agent/nodes/prioritize.py` | ✅ |
-| 4 | 4.1 | `app/agent/nodes/assign.py` | ⬜ |
-| 4 | 4.2 | `escalate.py`, `flag_dup.py`, `notify.py` + tool stubs | ⬜ |
+| 4 | 4.1 | `app/agent/nodes/assign.py` | ✅ |
+| 4 | 4.2 | `escalate.py`, `flag_dup.py`, `notify.py` + tool stubs | ✅ |
 | 5 | 5.1 | `app/agent/graph.py` | ⬜ |
 | 5 | 5.2 | `app/api/routes.py` | ⬜ |
 | 6 | 6.1 | Integration tests (5 scenarios) | ⬜ |
@@ -241,6 +241,17 @@ runs end-to-end with no live credentials. Log via structlog; **never log raw ima
 
 **Test / Done when:** each node appends its breadcrumb and returns the right status;
 tool stubs are call-logged, not making real network calls.
+
+> **Status (current):** ✅ Phase 4 complete. `assign.py` (keyword-based component→team→dev
+> routing tolerant of free-form LLM component strings; Triage default) +
+> `escalate.py` / `flag_dup.py` / `notify.py`. External I/O stubbed behind
+> `app/tools/`: `jira_tool.py`, `slack_tool.py`, `email_tool.py`, `oncall_tool.py` — all
+> structlog-logging, no network. **49 offline unit tests pass** (13 new: 10 assign,
+> 3 side-effect) + ruff clean. No API key needed.
+>
+> Status progression: intake → check_duplicate (`in_triage`/`duplicate`) → … → assign
+> (`assigned`) → notify (`notified`); duplicates end at flag_duplicate (`closed_duplicate`);
+> escalate sets `escalated` before assign. Final status of a normal/critical run = `notified`.
 
 ---
 
