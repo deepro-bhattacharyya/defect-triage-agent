@@ -1,0 +1,95 @@
+{
+  "_description": "Five canonical triage scenarios from the project plan's test table. Each record carries an 'expected' block (ground truth) used by tests to assert the agent's output. Remove or ignore the 'expected' and '_*' fields when feeding a defect into the live graph; they are test metadata, not part of TriageState.",
+  "scenarios": [
+    {
+      "_scenario": "1. Critical production outage",
+      "defect_id": "DEF-201",
+      "title": "Payment service completely down in production",
+      "description": "All payment attempts are failing in production with a 503 from the payment gateway. No user can complete a purchase. Started 10 minutes ago, affecting all users across all regions.",
+      "stack_trace": "ConnectionError: HTTPSConnectionPool(host='gw.payments.internal', port=443): Max retries exceeded\n  at PaymentClient.charge (payment_client.py:88)\n  at CheckoutService.complete_order (checkout.py:142)",
+      "environment": "production",
+      "reporter": "oncall-monitoring",
+      "image_attachments": [],
+      "expected": {
+        "is_duplicate": false,
+        "is_regression": false,
+        "severity": "CRITICAL",
+        "route": ["check_duplicate", "analyze_defect", "prioritize", "escalate", "assign_defect", "notify"]
+      }
+    },
+    {
+      "_scenario": "2. Cosmetic staging bug",
+      "defect_id": "DEF-202",
+      "title": "Submit button slightly misaligned on settings page",
+      "description": "On the account settings page in staging, the Save button is about 3px lower than the Cancel button next to it. Purely visual, no functional impact.",
+      "stack_trace": "",
+      "environment": "staging",
+      "reporter": "qa-intern",
+      "image_attachments": [],
+      "expected": {
+        "is_duplicate": false,
+        "is_regression": false,
+        "severity": "LOW",
+        "route": ["check_duplicate", "analyze_defect", "prioritize", "assign_defect", "notify"]
+      }
+    },
+    {
+      "_scenario": "3. Duplicate of an OPEN ticket (DEF-101) -> LLM skipped",
+      "defect_id": "DEF-203",
+      "title": "Applying a promo code at checkout causes a 500 error",
+      "description": "I tried to use a valid discount code during checkout in production and got a 500 error, and my cart emptied out. Happens every time regardless of card.",
+      "stack_trace": "",
+      "environment": "production",
+      "reporter": "customer-support",
+      "image_attachments": [],
+      "expected": {
+        "is_duplicate": true,
+        "duplicate_of": "DEF-101",
+        "is_regression": false,
+        "route": ["check_duplicate", "flag_duplicate"],
+        "_note": "Matches open DEF-101 above the 0.88 threshold; analyze/prioritize are skipped entirely."
+      }
+    },
+    {
+      "_scenario": "4. Regression of a RESOLVED ticket (DEF-050)",
+      "defect_id": "DEF-204",
+      "title": "Random logouts with 'Invalid session' under concurrent requests",
+      "description": "Users are being logged out at random and shown 'Invalid session'. Seems to happen when two tabs refresh the auth token simultaneously. We thought this was fixed a while ago but it's back in production.",
+      "stack_trace": "InvalidSessionError: token version mismatch\n  at TokenRefreshHandler.refresh (auth/token.py:54)",
+      "environment": "production",
+      "reporter": "support-lead",
+      "image_attachments": [],
+      "expected": {
+        "is_duplicate": false,
+        "is_regression": true,
+        "regression_of": "DEF-050",
+        "severity": "HIGH",
+        "route": ["check_duplicate", "analyze_defect", "prioritize", "assign_defect", "notify"],
+        "_note": "Matches CLOSED DEF-050 -> treated as regression, NOT duplicate; proceeds through analysis like a new bug."
+      }
+    },
+    {
+      "_scenario": "5. Screenshot attached -> multimodal analyze",
+      "defect_id": "DEF-205",
+      "title": "UI glitch on profile page (see screenshot)",
+      "description": "The profile avatar renders on top of the username text on the profile page. Attaching a screenshot. Low impact, web only.",
+      "stack_trace": "",
+      "environment": "production",
+      "reporter": "beta-tester",
+      "image_attachments": [
+        {
+          "media_type": "image/png",
+          "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+          "_note": "Placeholder 1x1 PNG so the JSON is valid. Replace 'data' with a real base64-encoded screenshot to exercise true multimodal analysis."
+        }
+      ],
+      "expected": {
+        "is_duplicate": false,
+        "is_regression": false,
+        "severity": "LOW",
+        "route": ["check_duplicate", "analyze_defect", "prioritize", "assign_defect", "notify"],
+        "_note": "analyze_defect must include the image block in the multimodal content sent to Claude."
+      }
+    }
+  ]
+}

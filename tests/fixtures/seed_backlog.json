@@ -1,0 +1,45 @@
+{
+  "_description": "Pre-existing defects to seed the vector store BEFORE running the agent. The duplicate/regression logic in check_duplicate matches incoming defects against these. 'status' drives the duplicate-vs-regression decision: RESOLVED/CLOSED/DONE => regression, anything else => open duplicate.",
+  "defects": [
+    {
+      "defect_id": "DEF-101",
+      "title": "Checkout page throws 500 when applying promo code",
+      "description": "When a user enters a valid promo code at checkout and clicks Apply, the page returns HTTP 500 and the cart is cleared. Reproducible on production for all payment methods.",
+      "component": "checkout-service",
+      "severity": "HIGH",
+      "status": "OPEN"
+    },
+    {
+      "defect_id": "DEF-050",
+      "title": "Login fails intermittently with token refresh race condition",
+      "description": "Users are randomly logged out and see 'Invalid session' when two requests refresh the auth token at the same time. Race condition in the token refresh handler.",
+      "component": "auth-service",
+      "severity": "HIGH",
+      "status": "CLOSED"
+    },
+    {
+      "defect_id": "DEF-077",
+      "title": "Dashboard charts load slowly on large accounts",
+      "description": "Accounts with more than 10k records take 8-12 seconds to render the analytics dashboard charts. Backend query is not paginated.",
+      "component": "analytics-service",
+      "severity": "MEDIUM",
+      "status": "IN_PROGRESS"
+    },
+    {
+      "defect_id": "DEF-090",
+      "title": "Export to CSV includes deleted rows",
+      "description": "The CSV export endpoint returns soft-deleted records. Filter on is_deleted is missing in the export query.",
+      "component": "reporting-service",
+      "severity": "MEDIUM",
+      "status": "RESOLVED"
+    },
+    {
+      "defect_id": "DEF-066",
+      "title": "Mobile nav menu overlaps header on small screens",
+      "description": "On viewports under 360px the hamburger menu overlaps the logo in the header. Cosmetic only.",
+      "component": "web-frontend",
+      "severity": "LOW",
+      "status": "OPEN"
+    }
+  ]
+}

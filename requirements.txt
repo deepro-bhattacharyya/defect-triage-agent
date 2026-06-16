@@ -1,0 +1,30 @@
+# Core agent framework
+langgraph>=1.0
+langchain-core>=0.3
+langchain-google-genai>=2.0   # Gemini 1.5 Flash (local dev). Prod uses Claude Sonnet 4.6 via langchain-anthropic.
+langchain-openai>=0.2         # text-embedding-3-small
+
+# Vector store
+chromadb>=0.5                 # local dev
+# pinecone-client>=5.0        # uncomment for cloud
+
+# API
+fastapi>=0.115
+uvicorn[standard]>=0.32
+
+# Integrations
+atlassian-python-api>=3.41    # Jira
+requests>=2.32                # Slack webhook / generic HTTP
+
+# Observability
+langsmith>=0.1
+structlog>=24.1
+sentry-sdk>=2.0
+
+# Config
+python-dotenv>=1.0
+
+# Testing / tooling
+pytest>=8.0
+pytest-mock>=3.14
+ruff>=0.6
