@@ -21,7 +21,11 @@ class TriageState(TypedDict, total=False):
     environment: str
     reporter: str
     # Each attachment: {"media_type": "image/png", "data": "<base64>"}
-    image_attachments: Annotated[list[dict], operator.add]
+    # NOTE: last-wins (intentionally NOT an operator.add reducer). intake_defect
+    # validates the raw input images and returns the cleaned list; a reducer here
+    # would append the cleaned list to the raw seeded one and duplicate attachments.
+    # intake_defect is the only writer, so overwrite semantics are correct.
+    image_attachments: list[dict]
 
     # ---- Analysis (analyze_defect) ----
     category: str

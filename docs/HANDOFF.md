@@ -32,8 +32,8 @@
 | 3 | 3.2 | `app/agent/nodes/prioritize.py` | ✅ |
 | 4 | 4.1 | `app/agent/nodes/assign.py` | ✅ |
 | 4 | 4.2 | `escalate.py`, `flag_dup.py`, `notify.py` + tool stubs | ✅ |
-| 5 | 5.1 | `app/agent/graph.py` | ⬜ |
-| 5 | 5.2 | `app/api/routes.py` | ⬜ |
+| 5 | 5.1 | `app/agent/graph.py` | ✅ |
+| 5 | 5.2 | `app/api/routes.py` | ✅ |
 | 6 | 6.1 | Integration tests (5 scenarios) | ⬜ |
 | 6 | 6.2 | Full suite + metrics report | ⬜ |
 
@@ -282,6 +282,20 @@ the final state.
 
 **Test / Done when:** `uvicorn app.api.routes:app --reload` starts; a `POST /triage` with a
 sample defect returns a populated final state with `triage_notes`.
+
+> **Status (current):** ✅ Phase 5 complete. `app/agent/graph.py` (`build_graph()`, wired
+> exactly per the plan — `route_after_check`, `route_severity`, conditional edges,
+> `RetryPolicy(max_attempts=3)` on analyze+prioritize) + `app/api/routes.py` (FastAPI
+> `POST /triage` + `GET /health`). **56 offline unit tests pass** (7 new: 4 full-graph
+> wiring with mocked LLM/store, 3 API) + ruff clean.
+>
+> ✅ **Verified LIVE end-to-end** (real Gemini + seeded store), all matching the fixtures:
+> #1 payment→CRITICAL→escalate→Payments→notified; #2 cosmetic→LOW→Frontend→notified;
+> #3 promo→DUPLICATE of DEF-101 (0.845)→closed_duplicate (LLM skipped); #4 logout→REGRESSION
+> of DEF-050 (0.819)→HIGH→notified. (#4 also exercised the rule-based prioritize fallback live.)
+>
+> 📌 **Applied the flagged fix:** `image_attachments` in `state.py` changed from an
+> `operator.add` reducer to last-wins (intake is the sole writer; a reducer double-appended).
 
 ---
 
