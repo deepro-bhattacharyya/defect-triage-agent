@@ -1,0 +1,184 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1240 1250" font-family="Segoe UI, system-ui, -apple-system, sans-serif">
+  <defs>
+    <linearGradient id="hdr" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#1e3a8a"/>
+      <stop offset="1" stop-color="#2563eb"/>
+    </linearGradient>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L9,3 L0,6 Z" fill="#64748b"/>
+    </marker>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="160%">
+      <feDropShadow dx="0" dy="1.5" stdDeviation="2" flood-color="#0f172a" flood-opacity="0.22"/>
+    </filter>
+    <style>
+      .title  { font-size:15px; font-weight:600; fill:#0f172a; }
+      .sub    { font-size:11px; fill:#475569; }
+      .pillt  { font-size:15px; font-weight:700; fill:#ffffff; letter-spacing:1px; }
+      .badge  { font-size:10px; font-weight:700; fill:#ffffff; letter-spacing:0.5px; }
+      .dect   { font-size:13.5px; font-weight:600; fill:#1e293b; }
+      .edge   { stroke:#94a3b8; stroke-width:2; fill:none; }
+      .elabel { font-size:11.5px; font-weight:600; fill:#334155; paint-order:stroke; stroke:#f8fafc; stroke-width:3px; }
+      .note   { font-size:11.5px; fill:#64748b; font-style:italic; }
+      .conn   { stroke:#cbd5e1; stroke-width:1.4; stroke-dasharray:3 3; fill:none; }
+      .lg     { font-size:12px; fill:#334155; }
+    </style>
+  </defs>
+
+  <!-- background -->
+  <rect x="0" y="0" width="1240" height="1250" fill="#f8fafc"/>
+
+  <!-- header -->
+  <rect x="0" y="0" width="1240" height="92" fill="url(#hdr)"/>
+  <text x="40" y="44" font-size="26" font-weight="700" fill="#ffffff">DefectTriageBot — Architecture &amp; Triage Flow</text>
+  <text x="40" y="72" font-size="13.5" fill="#dbeafe">Automated defect triage as a LangGraph state machine · duplicate &amp; regression detection · severity &amp; routing</text>
+
+  <!-- ===================== EDGES (drawn first, under nodes) ===================== -->
+  <!-- main spine -->
+  <path class="edge" d="M440,172 L440,206" marker-end="url(#arrow)"/>
+  <path class="edge" d="M440,271 L440,311" marker-end="url(#arrow)"/>
+  <path class="edge" d="M440,377 L440,405" marker-end="url(#arrow)"/>
+  <path class="edge" d="M440,513 L440,551" marker-end="url(#arrow)"/>
+  <path class="edge" d="M440,617 L440,656" marker-end="url(#arrow)"/>
+  <path class="edge" d="M440,722 L440,750" marker-end="url(#arrow)"/>
+  <path class="edge" d="M440,858 L440,891" marker-end="url(#arrow)"/>
+  <path class="edge" d="M440,957 L440,991" marker-end="url(#arrow)"/>
+  <path class="edge" d="M440,1057 L440,1096" marker-end="url(#arrow)"/>
+
+  <!-- duplicate branch -->
+  <path class="edge" d="M535,460 L772,460" marker-end="url(#arrow)"/>
+  <path class="edge" d="M880,491 L880,551" marker-end="url(#arrow)"/>
+
+  <!-- critical branch + rejoin -->
+  <path class="edge" d="M535,805 L722,805" marker-end="url(#arrow)"/>
+  <path class="edge" d="M830,836 L830,925 L548,925" marker-end="url(#arrow)"/>
+
+  <!-- edge labels -->
+  <text class="elabel" x="650" y="451" text-anchor="middle">DUPLICATE · open match</text>
+  <text class="elabel" x="452" y="538">NEW / REGRESSION</text>
+  <text class="elabel" x="628" y="796" text-anchor="middle">CRITICAL</text>
+  <text class="elabel" x="452" y="881">HIGH / MEDIUM / LOW</text>
+
+  <!-- ===================== NODES ===================== -->
+  <!-- START -->
+  <rect x="380" y="128" width="120" height="44" rx="22" fill="#334155" filter="url(#shadow)"/>
+  <text class="pillt" x="440" y="156" text-anchor="middle">START</text>
+
+  <!-- intake_defect -->
+  <rect x="335" y="209" width="210" height="62" rx="12" fill="#e2e8f0" stroke="#64748b" filter="url(#shadow)"/>
+  <text class="title" x="440" y="237" text-anchor="middle">intake_defect</text>
+  <text class="sub"   x="440" y="255" text-anchor="middle">normalize input · cap images</text>
+
+  <!-- check_duplicate -->
+  <rect x="335" y="314" width="210" height="62" rx="12" fill="#e2e8f0" stroke="#64748b" filter="url(#shadow)"/>
+  <text class="title" x="440" y="342" text-anchor="middle">check_duplicate</text>
+  <text class="sub"   x="440" y="360" text-anchor="middle">vector similarity · no LLM</text>
+
+  <!-- decision: match? -->
+  <polygon points="440,408 535,460 440,512 345,460" fill="#fef3c7" stroke="#d97706" filter="url(#shadow)"/>
+  <text class="dect" x="440" y="456" text-anchor="middle">Backlog</text>
+  <text class="dect" x="440" y="472" text-anchor="middle">match?</text>
+
+  <!-- flag_duplicate -->
+  <rect x="775" y="429" width="210" height="62" rx="12" fill="#ccfbf1" stroke="#0d9488" filter="url(#shadow)"/>
+  <text class="title" x="880" y="457" text-anchor="middle">flag_duplicate</text>
+  <text class="sub"   x="880" y="475" text-anchor="middle">link parent · close</text>
+
+  <!-- END (duplicate) -->
+  <rect x="820" y="553" width="120" height="44" rx="22" fill="#334155" filter="url(#shadow)"/>
+  <text class="pillt" x="880" y="581" text-anchor="middle">END</text>
+
+  <!-- analyze_defect (LLM) -->
+  <rect x="335" y="554" width="210" height="62" rx="12" fill="#ede9fe" stroke="#7c3aed" filter="url(#shadow)"/>
+  <text class="title" x="440" y="582" text-anchor="middle">analyze_defect</text>
+  <text class="sub"   x="440" y="600" text-anchor="middle">root cause · category · component</text>
+  <rect x="499" y="544" width="42" height="20" rx="10" fill="#7c3aed"/>
+  <text class="badge" x="520" y="558" text-anchor="middle">LLM</text>
+
+  <!-- prioritize (LLM) -->
+  <rect x="335" y="659" width="210" height="62" rx="12" fill="#ede9fe" stroke="#7c3aed" filter="url(#shadow)"/>
+  <text class="title" x="440" y="687" text-anchor="middle">prioritize</text>
+  <text class="sub"   x="440" y="705" text-anchor="middle">severity · priority (1–4)</text>
+  <rect x="499" y="649" width="42" height="20" rx="10" fill="#7c3aed"/>
+  <text class="badge" x="520" y="663" text-anchor="middle">LLM</text>
+
+  <!-- decision: severity? -->
+  <polygon points="440,753 535,805 440,857 345,805" fill="#fef3c7" stroke="#d97706" filter="url(#shadow)"/>
+  <text class="dect" x="440" y="810" text-anchor="middle">Severity?</text>
+
+  <!-- escalate -->
+  <rect x="725" y="774" width="210" height="62" rx="12" fill="#ccfbf1" stroke="#0d9488" filter="url(#shadow)"/>
+  <text class="title" x="830" y="802" text-anchor="middle">escalate</text>
+  <text class="sub"   x="830" y="820" text-anchor="middle">page on-call</text>
+
+  <!-- assign_defect -->
+  <rect x="335" y="894" width="210" height="62" rx="12" fill="#e2e8f0" stroke="#64748b" filter="url(#shadow)"/>
+  <text class="title" x="440" y="922" text-anchor="middle">assign_defect</text>
+  <text class="sub"   x="440" y="940" text-anchor="middle">component → team → developer</text>
+
+  <!-- notify -->
+  <rect x="335" y="994" width="210" height="62" rx="12" fill="#ccfbf1" stroke="#0d9488" filter="url(#shadow)"/>
+  <text class="title" x="440" y="1022" text-anchor="middle">notify</text>
+  <text class="sub"   x="440" y="1040" text-anchor="middle">Jira · Slack · email</text>
+
+  <!-- END (main) -->
+  <rect x="380" y="1098" width="120" height="44" rx="22" fill="#334155" filter="url(#shadow)"/>
+  <text class="pillt" x="440" y="1126" text-anchor="middle">END</text>
+
+  <!-- ===================== LEFT ANNOTATIONS ===================== -->
+  <path class="conn" d="M300,345 L334,345"/>
+  <text class="note" x="40" y="338">Duplicate check runs FIRST —</text>
+  <text class="note" x="40" y="354">before any LLM, so dupes skip analysis.</text>
+
+  <path class="conn" d="M300,460 L344,460"/>
+  <text class="note" x="40" y="448">Match ≥ 0.80 cosine similarity.</text>
+  <text class="note" x="40" y="464">Matched status decides:</text>
+  <text class="note" x="40" y="480">open ⇒ duplicate, resolved ⇒ regression.</text>
+
+  <path class="conn" d="M300,585 L334,585"/>
+  <text class="note" x="40" y="578">Multimodal (text + screenshots);</text>
+  <text class="note" x="40" y="594">defensive JSON, graceful fallback.</text>
+
+  <path class="conn" d="M300,690 L334,690"/>
+  <text class="note" x="40" y="683">Rule override forces CRITICAL on</text>
+  <text class="note" x="40" y="699">emergencies; rule fallback if LLM fails.</text>
+
+  <!-- ===================== LEGEND ===================== -->
+  <rect x="990" y="120" width="235" height="178" rx="10" fill="#ffffff" stroke="#cbd5e1" filter="url(#shadow)"/>
+  <text x="1006" y="146" font-size="14" font-weight="700" fill="#0f172a">Legend</text>
+
+  <rect x="1006" y="160" width="18" height="18" rx="4" fill="#e2e8f0" stroke="#64748b"/>
+  <text class="lg" x="1032" y="174">Deterministic step (no LLM)</text>
+
+  <rect x="1006" y="190" width="18" height="18" rx="4" fill="#ede9fe" stroke="#7c3aed"/>
+  <text class="lg" x="1032" y="204">LLM step (Gemini)</text>
+
+  <polygon points="1015,220 1026,231 1015,242 1004,231" fill="#fef3c7" stroke="#d97706" transform="translate(0,-2)"/>
+  <text class="lg" x="1032" y="234">Decision / routing</text>
+
+  <rect x="1006" y="250" width="18" height="18" rx="4" fill="#ccfbf1" stroke="#0d9488"/>
+  <text class="lg" x="1032" y="264">Side-effect / terminal</text>
+
+  <rect x="1006" y="278" width="18" height="14" rx="7" fill="#334155"/>
+  <text class="lg" x="1032" y="290">Start / End</text>
+
+  <!-- ===================== KEY FACTS BOX ===================== -->
+  <rect x="990" y="640" width="235" height="232" rx="10" fill="#ffffff" stroke="#cbd5e1" filter="url(#shadow)"/>
+  <text x="1006" y="666" font-size="14" font-weight="700" fill="#0f172a">At a glance</text>
+  <text class="lg" x="1006" y="692">⏱  ~45 min manual → &lt; 2 min</text>
+  <text class="lg" x="1006" y="716">🔁  Duplicates skip the LLM</text>
+  <text class="lg" x="1006" y="740">♻️  Regressions get full analysis</text>
+  <text class="lg" x="1006" y="764">🚨  CRITICAL auto-pages on-call</text>
+  <text class="lg" x="1006" y="788">🧭  Auto-routes to owning team</text>
+  <text class="lg" x="1006" y="812">📝  Full audit trail per defect</text>
+  <text class="lg" x="1006" y="836">🛡️  Rule fallback if LLM is down</text>
+  <text class="lg" x="1006" y="860">🔌  Jira / Slack / email hooks</text>
+
+  <!-- ===================== TECH FOOTER ===================== -->
+  <rect x="0" y="1186" width="1240" height="64" fill="#1e293b"/>
+  <text x="620" y="1216" text-anchor="middle" font-size="13.5" font-weight="600" fill="#e2e8f0">
+    LangGraph · Gemini 2.5 Flash · gemini-embedding-001 · ChromaDB · FastAPI · React + Vite
+  </text>
+  <text x="620" y="1236" text-anchor="middle" font-size="11.5" fill="#94a3b8">
+    Provider-isolated (dev: Gemini · prod: Claude Sonnet 4.6 + OpenAI embeddings) · runs behind corporate TLS proxy
+  </text>
+</svg>
