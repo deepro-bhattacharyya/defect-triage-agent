@@ -54,7 +54,7 @@ Each layer depends only on the ones below it.
 | **Tools** | `app/tools/` | All "talking to the outside world": LLM, embeddings/vector store, Jira/Slack/email/on-call, TLS, JSON parsing. | Nothing in the agent. |
 | **Nodes** | `app/agent/nodes/` | One pure function per triage step. Each takes `TriageState`, returns a partial dict. | `tools` only. |
 | **Graph** | `app/agent/graph.py` + `state.py` | The state schema and the wiring (nodes + conditional edges + retries). | `nodes`, `tools`. |
-| **API** | `app/api/routes.py` | Thin FastAPI surface: `POST /triage` runs the graph; also serves the UI. Adds *no* triage logic. | `graph`. |
+| **API** | `app/api/routes.py` | Thin FastAPI surface: `POST /triage` **streams** the graph run (SSE); also serves the UI. Adds *no* triage logic. | `graph`. |
 | **UI** | `frontend/` (React + Vite) | Browser form + result view. Calls the API over HTTP. | `api` only — never imports Python. |
 
 **The golden rule the code enforces:** the *brain* (nodes/graph) is kept separate
@@ -278,6 +278,13 @@ precision, assignment rate, and latency. Full results + the quota caveat are in
 The UI (`frontend/`, React 18 + Vite 5) is a **thin client over `POST /triage`**
 — no triage logic of its own, so the "brain vs. hands" rule holds. It was added
 beyond the original v1 scope.
+
+**Live streaming.** `POST /triage` streams **Server-Sent Events** via LangGraph's
+`.astream(stream_mode=["updates","values"])`: each node's `triage_notes` breadcrumb
+is emitted as a `log` event the moment it's written, then a final `result` event
+carries the complete state. The UI shows a live log feed (`LogFeed.jsx`) that fills
+in step-by-step as the graph runs, above the unchanged result panel. `api.js` reads
+the stream with a `ReadableStream` reader and an SSE frame parser.
 
 - **Dev:** `npm run dev` (port 5173); Vite proxies `/triage` + `/health` to the
   backend (8000), keeping the browser same-origin.

@@ -4,6 +4,11 @@ A small React single-page app for submitting a defect and viewing the triage
 result (severity, priority, team/assignee, duplicate/regression flags, root-cause
 analysis, and the full audit trail).
 
+**Live streaming:** `POST /triage` streams Server-Sent Events, so the UI shows a
+**live log feed** — each node's breadcrumb appears the moment it runs (intake →
+check_duplicate → analyze → …) — above the final result, which renders when the
+stream completes.
+
 > Note: a UI was out of the original v1 scope (`CLAUDE.md` guardrails) — this was
 > added as an explicit, approved extension. It's a thin client over the existing
 > `POST /triage` API; no backend logic lives here.
@@ -59,11 +64,12 @@ frontend/
 ├── package.json
 └── src/
     ├── main.jsx            # React root
-    ├── App.jsx             # state + layout
-    ├── api.js              # fetch wrapper for /triage (friendly quota errors)
+    ├── App.jsx             # state + layout (logs + result)
+    ├── api.js              # SSE stream reader for /triage
     ├── styles.css
     └── components/
         ├── DefectForm.jsx  # input form (+ image→base64, sample loader)
+        ├── LogFeed.jsx     # live, streaming node-by-node log feed
         └── ResultPanel.jsx # severity badges, banners, audit trail
 ```
 

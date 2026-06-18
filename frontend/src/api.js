@@ -1,28 +1,46 @@
-// Thin client for the FastAPI backend. Relative URLs work both via the Vite dev
-// proxy (npm run dev) and when the built app is served by the backend itself.
+// Streaming client for the FastAPI backend. POST /triage returns Server-Sent
+// Events: `log` events as each node runs, then a final `result` (or `error`).
+// Relative URL works via the Vite dev proxy and when served by the backend.
 
-export async function triageDefect(payload) {
+export async function triageDefectStream(payload, { onLog, onResult }) {
   const res = await fetch('/triage', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   })
 
-  if (!res.ok) {
+  if (!res.ok || !res.body) {
     let detail = `HTTP ${res.status}`
     try {
-      const body = await res.json()
-      detail = typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail || body)
-    } catch {
       detail = (await res.text()) || detail
-    }
-    if (/RESOURCE_EXHAUSTED|429|quota/i.test(detail)) {
-      throw new Error(
-        'Gemini free-tier quota exhausted (20 requests/day). Try a duplicate defect ' +
-          '(it skips the LLM), or retry after the daily reset.',
-      )
+    } catch {
+      /* ignore */
     }
     throw new Error(detail)
   }
-  return res.json()
+
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  while (true) {
+    const { value, done } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+
+    // SSE frames are separated by a blank line.
+    let sep
+    while ((sep = buffer.indexOf('\n\n')) !== -1) {
+      const frame = buffer.slice(0, sep)
+      buffer = buffer.slice(sep + 2)
+
+      const dataLine = frame.split('\n').find((l) => l.startsWith('data:'))
+      if (!dataLine) continue
+      const evt = JSON.parse(dataLine.slice(5).trim())
+
+      if (evt.type === 'log') onLog(evt)
+      else if (evt.type === 'result') onResult(evt.state)
+      else if (evt.type === 'error') throw new Error(evt.message)
+    }
+  }
 }
