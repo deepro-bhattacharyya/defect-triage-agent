@@ -4,9 +4,10 @@ How to start the project, send a defect, demo the live streaming, and fix things
 when they go wrong. Setup is owned by [INSTALL.md](INSTALL.md) — do that first.
 
 > **What's working today:** the full triage pipeline + React UI with live streaming.
-> Jira, Slack, email, and on-call integrations are **stubs** — they log intent but
-> make no real network calls. Activating them is a future step (add credentials to
-> `.env` + replace the stub body in `app/tools/`).
+> **Jira integration is live** — each triaged defect creates a real Jira Bug (see
+> [CONFIGURATION.md](CONFIGURATION.md) → Jira). Slack, email, and on-call are still
+> **stubs** that log intent only; activating them is a future step (add credentials
+> to `.env` + replace the stub body in `app/tools/`).
 
 ---
 
@@ -184,7 +185,8 @@ caveats (free-tier quota, N=5 sample size).
 | `npm install` fails with cert error | Corporate TLS proxy | `$env:NODE_EXTRA_CA_CERTS="..\certs\corp-ca-bundle.pem"` then retry |
 | `POST /triage` returns HTTP 500 with LLM error | Gemini quota or TLS | Check logs for `RESOURCE_EXHAUSTED` or `CERTIFICATE_VERIFY_FAILED` |
 | All `prioritize` results are fallback-based | LLM JSON parsing failing | Check if Gemini is returning valid JSON; look at the WARN in `triage_notes` |
-| Jira/Slack/email not actually sending | Stubs are not yet wired | Expected — fill in `app/tools/jira_tool.py` etc. with real API calls + credentials |
+| Jira ticket not created | Creds missing/invalid, or org blocks API access | Run `python scripts/jira_check.py`. Check `JIRA_BASE_URL` has a single `https://`. The breadcrumb says "Jira not configured" or "Jira create FAILED". |
+| Slack/email not actually sending | Stubs not yet wired | Expected — fill in `app/tools/slack_tool.py` / `email_tool.py` with real calls + credentials |
 
 ### Useful log output
 
@@ -200,6 +202,6 @@ When something looks wrong, this is the first thing to read.
   "[prioritize] rule override: LOW -> CRITICAL (emergency keyword)",
   "[escalate] paged on-call for CRITICAL defect DEF-901",
   "[assign_defect] routed to Payments (payments-oncall@example.com) for component 'checkout-service'",
-  "[notify] Jira updated + Slack/email sent for DEF-901 (CRITICAL -> Payments)"
+  "[notify] created Jira SCRUM-12 (CRITICAL -> Payments); Slack + email sent"
 ]
 ```

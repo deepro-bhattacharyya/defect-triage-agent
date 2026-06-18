@@ -6,9 +6,9 @@ one-paragraph overview; every other topic has exactly one home, linked below.
 > **What it is.** An LLM-powered LangGraph agent that automatically reviews,
 > prioritizes, and routes incoming software bug reports. It ingests a defect,
 > checks for duplicates/regressions via vector similarity, uses Google Gemini to
-> analyze root cause and severity, assigns it to the right team, and notifies
-> stakeholders — turning a ~45-minute manual triage into a sub-2-minute automated
-> one. Includes a React UI with live step-by-step streaming.
+> analyze root cause and severity, assigns it to the right team, **creates a Jira
+> ticket**, and notifies stakeholders — turning a ~45-minute manual triage into a
+> sub-2-minute automated one. Includes a React UI with live step-by-step streaming.
 >
 > **ADLC Status:** Phases 1–5 complete (Planning → Design → Development →
 > Testing → Deployment). Full phase log: [docs/HANDOFF.md](docs/HANDOFF.md).
@@ -76,4 +76,5 @@ Short path: **ONBOARDING → INSTALL → RUNBOOK**.
 | **Phase 3 — Development** | All 8 triage nodes, vector store, LLM client, FastAPI + SSE streaming, React UI | ✅ Complete |
 | **Phase 4 — Testing** | 57 unit tests (mocked LLM/store), 5-scenario integration tests, evaluation script | ✅ Complete |
 | **Phase 5 — Deployment** | Local deployment via uvicorn, backend-served React UI, env-based config | ✅ Complete |
-| **Phase 6 — Future** | Real Jira/Slack/email/on-call integrations (stubs in place), Pinecone cloud store, prod Claude Sonnet 4.6 | ⏳ Planned |
+| **Phase 6 — Integrations** | **Jira (live — creates a Bug per defect)**; Slack/email/on-call still stubs | 🔵 In progress |
+| **Phase 7 — Future** | Real Slack/email/on-call, Pinecone cloud store, prod Claude Sonnet 4.6 | ⏳ Planned |

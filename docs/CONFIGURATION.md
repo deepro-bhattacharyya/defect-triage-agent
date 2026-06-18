@@ -22,10 +22,12 @@ Copy `.env.example` → `.env` (gitignored, never commit it). Recognized variabl
 | `LANGSMITH_API_KEY` | No | — | LangSmith tracing (optional observability). |
 | `MAX_IMAGE_MB` | No | `5` | Max megabytes per image attachment. |
 | `MAX_IMAGES` | No | `3` | Max number of image attachments per defect. |
-| `JIRA_BASE_URL` | No | — | e.g. `https://your-org.atlassian.net`. Used when Jira stub is replaced with a real call. |
-| `JIRA_EMAIL` | No | — | Email for Jira API authentication. |
-| `JIRA_API_TOKEN` | No | — | Jira API token (create at id.atlassian.com). |
-| `SLACK_WEBHOOK_URL` | No | — | Slack incoming webhook URL. Used when stub is replaced. |
+| `JIRA_BASE_URL` | For Jira | — | e.g. `https://your-org.atlassian.net`. **Single `https://`!** Jira integration is live. |
+| `JIRA_EMAIL` | For Jira | — | Email of the Atlassian account that owns the API token. |
+| `JIRA_API_TOKEN` | For Jira | — | Create at [id.atlassian.com/manage-profile/security/api-tokens](https://id.atlassian.com/manage-profile/security/api-tokens). |
+| `JIRA_PROJECT_KEY` | No | `SCRUM` | Project key new triaged Bugs are created in. |
+| `JIRA_ISSUE_TYPE` | No | `Bug` | Issue type created for each defect. |
+| `SLACK_WEBHOOK_URL` | No | — | Slack incoming webhook URL. Used when the Slack stub is replaced. |
 | `SENTRY_DSN` | No | — | Sentry error tracking (optional). |
 | `SIMILARITY_THRESHOLD` | No | `0.80` | Note: this is read from `.env` for reference; the live constant is in `duplicate.py`. |
 
@@ -104,6 +106,40 @@ DEFAULT_TEAM = ("Triage", "triage-lead@example.com")
 
 The `component` value comes from the LLM (free-form text), so the keyword approach
 tolerates strings like `"PaymentClient"`, `"Profile Page"`, etc.
+
+---
+
+## Jira integration (live)
+
+`notify` creates a real Jira **Bug** for each triaged defect; `flag_duplicate`
+creates a duplicate Bug and best-effort closes it. Configured entirely via the
+`.env` variables above (`JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN`,
+`JIRA_PROJECT_KEY`, `JIRA_ISSUE_TYPE`).
+
+**Severity → Jira priority mapping** (`app/agent/nodes/notify.py`):
+
+| Our severity | Jira priority |
+|--------------|---------------|
+| CRITICAL | Highest |
+| HIGH | High |
+| MEDIUM | Medium |
+| LOW | Low |
+
+**Verify your connection** any time with:
+```powershell
+python scripts/jira_check.py
+```
+It prints your authenticated user, accessible projects, issue types, and priority
+values — useful for confirming `JIRA_PROJECT_KEY`/`JIRA_ISSUE_TYPE` are valid.
+
+**Resilience:** every Jira call is best-effort. Missing creds, a 401, or a network
+error returns `{"ok": False, ...}`, is logged, and the triage still completes — the
+breadcrumb records "created Jira SCRUM-N", "Jira not configured", or "Jira create FAILED".
+
+> **Common gotcha:** `JIRA_BASE_URL` must have a **single** `https://`. A doubled
+> `https://https://...` causes a DNS resolution error. Enterprise orgs may also block
+> API-token access — if `jira_check.py` returns 401 with a valid token, ask your
+> Atlassian admin to allow REST API access (or use a personal Atlassian site).
 
 ---
 

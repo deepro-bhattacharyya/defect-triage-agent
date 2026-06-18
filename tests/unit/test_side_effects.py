@@ -23,22 +23,40 @@ def test_escalate_pages_oncall(monkeypatch):
     assert calls and calls[0][0][0] == "DEF-201" and calls[0][0][1] == "CRITICAL"
 
 
-def test_flag_duplicate_links_parent(monkeypatch):
-    linked, commented = [], []
-    monkeypatch.setattr(flag_mod, "link_duplicate", lambda d, p: linked.append((d, p)) or {"ok": True})
-    monkeypatch.setattr(flag_mod, "add_comment", lambda d, c: commented.append(d) or {"ok": True})
+def test_flag_duplicate_creates_and_closes_jira(monkeypatch):
+    created, commented, transitioned = [], [], []
+    monkeypatch.setattr(flag_mod, "create_issue",
+                        lambda **kw: created.append(kw) or {"ok": True, "key": "SCRUM-9"})
+    monkeypatch.setattr(flag_mod, "add_comment",
+                        lambda k, c: commented.append((k, c)) or {"ok": True})
+    monkeypatch.setattr(flag_mod, "transition_to",
+                        lambda k, *names: transitioned.append((k, names)) or {"ok": True})
 
-    out = flag_duplicate({"defect_id": "DEF-203", "duplicate_of": "DEF-101"})
+    out = flag_duplicate({"defect_id": "DEF-203", "duplicate_of": "DEF-101", "title": "promo 500"})
 
     assert out["status"] == "closed_duplicate"
-    assert linked == [("DEF-203", "DEF-101")]
-    assert commented == ["DEF-203"]
+    assert out["jira_key"] == "SCRUM-9"
+    assert created and "DUPLICATE" in created[0]["summary"]
+    assert commented and commented[0][0] == "SCRUM-9" and "DEF-101" in commented[0][1]
+    assert transitioned and transitioned[0][0] == "SCRUM-9"
     assert "DEF-101" in out["triage_notes"][0]
 
 
-def test_notify_hits_all_three_channels(monkeypatch):
-    jira, slack, email = [], [], []
-    monkeypatch.setattr(notify_mod, "update_ticket", lambda d, f: jira.append((d, f)) or {"ok": True})
+def test_flag_duplicate_degrades_when_jira_down(monkeypatch):
+    monkeypatch.setattr(flag_mod, "create_issue", lambda **kw: {"ok": False, "skipped": True})
+    # add_comment / transition_to must NOT be called when create failed
+    monkeypatch.setattr(flag_mod, "add_comment", lambda *a, **k: (_ for _ in ()).throw(AssertionError("called")))
+    monkeypatch.setattr(flag_mod, "transition_to", lambda *a, **k: (_ for _ in ()).throw(AssertionError("called")))
+
+    out = flag_duplicate({"defect_id": "DEF-203", "duplicate_of": "DEF-101", "title": "x"})
+    assert out["status"] == "closed_duplicate"   # still finishes
+    assert out["jira_key"] == ""
+
+
+def test_notify_creates_jira_and_notifies(monkeypatch):
+    created, slack, email = [], [], []
+    monkeypatch.setattr(notify_mod, "create_issue",
+                        lambda **kw: created.append(kw) or {"ok": True, "key": "SCRUM-10"})
     monkeypatch.setattr(notify_mod, "post_message", lambda c, t: slack.append((c, t)) or {"ok": True})
     monkeypatch.setattr(notify_mod, "send_email", lambda to, s, b: email.append(to) or {"ok": True})
 
@@ -54,7 +72,21 @@ def test_notify_hits_all_three_channels(monkeypatch):
     )
 
     assert out["status"] == "notified"
-    assert len(jira) == 1 and jira[0][0] == "DEF-201"
+    assert out["jira_key"] == "SCRUM-10"
+    assert created and created[0]["priority"] == "Highest"   # CRITICAL -> Highest
+    assert "[CRITICAL]" in created[0]["summary"]
     assert len(slack) == 1 and slack[0][0] == "#defect-triage"
     assert email == ["payments-oncall@example.com"]
-    assert out["triage_notes"][0].startswith("[notify]")
+    assert "SCRUM-10" in out["triage_notes"][0]
+
+
+def test_notify_degrades_when_jira_down(monkeypatch):
+    monkeypatch.setattr(notify_mod, "create_issue", lambda **kw: {"ok": False, "skipped": True})
+    monkeypatch.setattr(notify_mod, "post_message", lambda c, t: {"ok": True})
+    monkeypatch.setattr(notify_mod, "send_email", lambda to, s, b: {"ok": True})
+
+    out = notify({"defect_id": "DEF-1", "severity": "LOW", "title": "x",
+                  "assigned_team": "Frontend", "assigned_to": "f@example.com"})
+    assert out["status"] == "notified"     # still finishes
+    assert out["jira_key"] == ""
+    assert "Jira not configured" in out["triage_notes"][0]

@@ -20,9 +20,9 @@
 The 30-second version: it's a **defect triage agent** — reachable via a React UI
 or `POST /triage` directly — that reads a bug report, checks whether it's already
 known (no LLM), asks Gemini for root cause and severity, picks the right team, and
-streams every step back to the UI in real time. Stubs for Jira/Slack/email/on-call
-are wired in and ready to be replaced with real credentials. No changes to any node
-code are needed to activate them.
+streams every step back to the UI in real time. **Jira integration is live** (creates
+a real Bug per triaged defect); Slack/email/on-call are still stubs, wired in and ready
+to be replaced with real credentials. No changes to any node code are needed to activate them.
 
 ---
 
@@ -42,12 +42,12 @@ All Python code lives under `app/`. The public entry point is
 | `app/agent/nodes/assign.py` | Component → team → developer (static routing table) |
 | `app/agent/nodes/escalate.py` | Page on-call for CRITICAL (stub — logs only) |
 | `app/agent/nodes/flag_dup.py` | Link to parent ticket, close as duplicate (stub) |
-| `app/agent/nodes/notify.py` | Jira + Slack + email (stubs — logs only) |
+| `app/agent/nodes/notify.py` | Creates a Jira Bug (live) + Slack + email (stubs) |
 | `app/tools/llm.py` | `get_llm()` — Gemini 2.5 Flash (dev) / Claude Sonnet 4.6 (prod) |
 | `app/tools/vector_store.py` | ChromaDB wrapper — `similarity_search_with_score` |
 | `app/tools/certs.py` | Corporate-TLS bootstrap (auto-detects `certs/corp-ca-bundle.pem`) |
 | `app/tools/parsing.py` | Defensive JSON extraction from LLM output |
-| `app/tools/jira_tool.py` | Jira integration **stub** — replace with real API calls |
+| `app/tools/jira_tool.py` | Jira integration — **live** (REST v3: create issue, comment, transition) |
 | `app/tools/slack_tool.py` | Slack integration **stub** |
 | `app/tools/email_tool.py` | Email integration **stub** |
 | `app/tools/oncall_tool.py` | On-call paging **stub** |
@@ -76,9 +76,10 @@ All Python code lives under `app/`. The public entry point is
   degrade gracefully.
 - *"How does the streaming work?"* → `app/api/routes.py` (`astream`) and
   `frontend/src/api.js` (`triageDefectStream`). See [API_REFERENCE.md](API_REFERENCE.md).
-- *"How do I wire real Jira/Slack?"* → `app/tools/jira_tool.py`,
-  `app/tools/slack_tool.py` — each has a clear `# TODO` where the HTTP call goes.
-  Add the credentials to `.env` (already in `.env.example`).
+- *"How does Jira ticket creation work?"* → `app/tools/jira_tool.py` (real REST v3).
+  Verify your connection with `python scripts/jira_check.py`. Config in [CONFIGURATION.md](CONFIGURATION.md).
+- *"How do I wire real Slack/email?"* → `app/tools/slack_tool.py`,
+  `app/tools/email_tool.py` — each has a clear `# TODO` where the HTTP call goes.
 - *"How is a test written for a node?"* → `tests/unit/test_intake.py` or
   `tests/unit/test_duplicate.py` as worked examples. See [TESTING.md](TESTING.md).
 

@@ -47,6 +47,9 @@ class TriageState(TypedDict, total=False):
     assigned_team: str
     assigned_to: str
 
+    # ---- Integration (notify / flag_duplicate) ----
+    jira_key: str         # the created Jira issue key, e.g. "SCRUM-1" (empty if none)
+
     # ---- Audit ----
     triage_notes: Annotated[list[str], operator.add]
     status: str           # in_triage | duplicate | assigned | escalated | ...

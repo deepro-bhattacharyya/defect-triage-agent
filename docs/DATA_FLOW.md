@@ -56,7 +56,7 @@ the compiled graph via `_graph.astream()` and streams each step back as SSE.
                  │  breadcrumb ──► SSE log event
                  ▼
     ┌─────────────────────────┐
-    │  6. notify              │  Jira + Slack + email (stubs)
+    │  6. notify              │  create Jira Bug (live) + Slack/email (stubs)
     └────────────┬────────────┘
                  │  breadcrumb ──► SSE log event
                  ▼
@@ -174,15 +174,22 @@ The match is case-insensitive. To add a team, edit `TEAM_ROUTING` in
 
 ## Step 7 — Notifications (`notify`)
 
-`notify` calls three tool stubs in sequence:
-1. `jira_tool.update_ticket(defect_id, {...})` — logs the fields that *would* be updated.
-2. `slack_tool.post_message("#defect-triage", summary)` — logs the message.
-3. `email_tool.send_email(assignee, subject, body)` — logs the email.
+`notify` does three things:
+1. **`jira_tool.create_issue(...)` — LIVE.** Creates a real Jira Bug in the
+   `JIRA_PROJECT_KEY` project, mapping severity → Jira priority (CRITICAL→Highest,
+   HIGH→High, MEDIUM→Medium, LOW→Low), with `auto-triaged` + team + component labels.
+   The created key (e.g. `SCRUM-9`) is stored in `state["jira_key"]` and the breadcrumb.
+2. `slack_tool.post_message("#defect-triage", summary)` — **stub** (logs only).
+3. `email_tool.send_email(assignee, subject, body)` — **stub** (logs only).
 
-All three are **stubs**: they log via `structlog` and return `{"ok": True}`. No
-network calls are made. To activate them, add the real credentials to `.env` and
-replace the stub body with the actual API calls. The integration points are in
-`app/tools/jira_tool.py`, `slack_tool.py`, and `email_tool.py`.
+Jira is **best-effort**: if credentials are missing or Jira is unreachable, the call
+returns `{"ok": False, ...}`, the breadcrumb records it (e.g. "Jira not configured" or
+"Jira create FAILED"), and triage still completes — it never raises. Slack/email remain
+stubs; activate them by adding credentials to `.env` and replacing the stub body in
+`app/tools/slack_tool.py` / `email_tool.py`.
+
+For **duplicates**, `flag_duplicate` likewise creates a Jira Bug labeled `duplicate`,
+comments which parent it duplicates, and best-effort transitions it to a closed status.
 
 ---
 
@@ -228,7 +235,7 @@ instead.
  → analyze_defect: LLM → { category: "Authentication", component: "Session Management", ... }
  → prioritize: LLM → HIGH; no emergency keywords
  → assign_defect: "session" → Identity & Access
- → notify: stubs log Jira/Slack/email
+ → notify: creates real Jira Bug (e.g. SCRUM-12); Slack/email stubs log
  → SSE: 6 log events + result { is_regression: true, severity: "HIGH", status: "notified" }
 ```
 
@@ -242,7 +249,7 @@ instead.
    → severity forced to CRITICAL ✓
  → escalate: stub logs on-call page for DEF-201
  → assign_defect: "payment" → Payments
- → notify: stubs log
+ → notify: creates real Jira Bug; Slack/email stubs log
  → SSE: result { severity: "CRITICAL", status: "notified" }
 ```
 
@@ -254,6 +261,6 @@ instead.
  → analyze_defect: LLM → UI/Visual / Settings Page
  → prioritize: LLM → LOW (cosmetic, staging)
  → assign_defect: "page" → Frontend
- → notify: stubs log
+ → notify: creates real Jira Bug; Slack/email stubs log
  → SSE: result { severity: "LOW", status: "notified" }
 ```

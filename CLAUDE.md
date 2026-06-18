@@ -70,7 +70,7 @@ START → intake_defect → check_duplicate → ┌─ DUPLICATE  → flag_dupli
 | `assign_defect`   | No  | Component → team → developer routing |
 | `escalate`        | No  | Page on-call for CRITICAL bugs |
 | `flag_duplicate`  | No  | Link to parent ticket, close as duplicate |
-| `notify`          | No  | Jira update + Slack + email |
+| `notify`          | No  | Create Jira Bug (live) + Slack + email (stubs) |
 
 ### Key constants (do not change without flagging)
 - `SIMILARITY_THRESHOLD = 0.80` — at/above = match. **Recalibrated from the plan's
@@ -89,7 +89,10 @@ START → intake_defect → check_duplicate → ┌─ DUPLICATE  → flag_dupli
 - LLM: Gemini 2.5 Flash (dev) / Claude Sonnet 4.6 (prod)
 - Embeddings: Gemini `gemini-embedding-001` (3072-dim). POC is Gemini-only; OpenAI not used.
 - Vector store: ChromaDB (local dev) / Pinecone (cloud)
-- API: FastAPI + uvicorn
+- API: FastAPI + uvicorn (`POST /triage` streams SSE)
+- Integrations: **Jira live** (REST v3 via `app/tools/jira_tool.py` — creates a Bug per
+  defect; `notify`/`flag_duplicate`). Slack/email/on-call still stubs. All best-effort
+  (never raise). Config: `JIRA_*` in `.env`; verify with `python scripts/jira_check.py`.
 - Tracing/eval: LangSmith
 - Logging: structlog; errors: Sentry
 - Frontend: React 18 + Vite 5 in `frontend/` (added as an approved extension beyond

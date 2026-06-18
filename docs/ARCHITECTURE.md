@@ -15,7 +15,7 @@ machine**: it's normalized (`intake`), checked against the existing backlog in a
 short-circuits (confirmed duplicate) or flows on to an **LLM** that analyzes root
 cause (`analyze`) and rates urgency (`prioritize`). Deterministic rules then route
 it — page on-call for CRITICAL, pick an owning team — and side-effect nodes close
-the loop (Jira/Slack/email, all stubbed). One shared `TriageState` dict carries
+the loop (Jira live; Slack/email stubbed). One shared `TriageState` dict carries
 everything; every node leaves a breadcrumb in `triage_notes` for the audit trail.
 The expensive/unreliable parts (LLM, embeddings, integrations) are each isolated
 behind a single wrapper, so the graph stays testable and the dev/prod swaps touch
@@ -105,7 +105,7 @@ and carry `RetryPolicy(max_attempts=3)`; the rest are deterministic.
 | `assign_defect` | No | Component → team → developer routing |
 | `escalate` | No | Page on-call (CRITICAL only) |
 | `flag_duplicate` | No | Link to parent ticket, close as duplicate |
-| `notify` | No | Jira update + Slack + email |
+| `notify` | No | Create Jira Bug (live) + Slack + email (stubs) |
 
 Two **conditional edges** are the only branching:
 
@@ -204,15 +204,18 @@ runs end-to-end with no credentials.
 | `vector_store.py` | ChromaDB wrapper + injectable embedder | live (Gemini embeddings) |
 | `parsing.py` | Defensive JSON extraction | pure |
 | `certs.py` | Corporate-TLS bootstrap (§9) | env setup |
-| `jira_tool.py` | `update_ticket` / `add_comment` / `link_duplicate` | **stub** (structlog, TODOs) |
+| `jira_tool.py` | `create_issue` / `add_comment` / `transition_to` | **LIVE** (REST API v3) |
 | `slack_tool.py` | `post_message` | **stub** |
 | `email_tool.py` | `send_email` | **stub** |
 | `oncall_tool.py` | `page_oncall` | **stub** |
 
-The integration stubs log via `structlog` and return canned responses with clear
-`TODO`s — so `escalate`/`flag_duplicate`/`notify` are fully exercisable, and the
-side-effect tests just monkeypatch the tool functions to assert each node calls
-the right integration. (Never log raw image data or PII.)
+**Jira is live** — `notify` creates a real Bug per defect and `flag_duplicate`
+creates + closes a duplicate Bug. Every Jira call is best-effort: missing creds,
+auth failure, or network error returns `{"ok": False, ...}` and the node finishes
+anyway (triage never stops). The remaining stubs log via `structlog` and return
+canned responses with clear `TODO`s — so `escalate`/`notify` are fully exercisable,
+and the side-effect tests monkeypatch the tool functions. (Never log raw image data
+or PII.)
 
 ---
 
@@ -326,5 +329,5 @@ even when the daily quota is gone. See [../frontend/README.md](../frontend/READM
 - **Severity is the one non-deterministic signal.** Routing, duplicate, and
   regression detection are deterministic; severity depends on the LLM, with the
   rule override (catch emergencies) and rule fallback (always valid) as guards.
-- **Integrations are stubs.** Jira/Slack/email/on-call log intent only — wiring the
+- **Jira is live; Slack/email/on-call are stubs.** They log intent only — wiring the
   real APIs is the obvious next step beyond this POC.
