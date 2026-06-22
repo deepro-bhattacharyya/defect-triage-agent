@@ -58,6 +58,21 @@ The backend serves everything:
 Open `http://localhost:8000/` in your browser. You see a two-panel layout:
 left = defect form, right = live log + result.
 
+**Jira-first flow (when Jira is connected):** the form leads with a **Jira defect ID**
+field. Enter a key (e.g. `SCRUM-9`), click **Fetch** — every field auto-populates from
+the issue (description, reporter, environment, and any image attachments). Edit if
+needed, then **Triage**. Because it came from Jira, the result is written **back** to
+that same issue (a triage comment + priority) rather than creating a new Bug. If Jira
+isn't connected, the form falls back to fully manual entry.
+
+**Assignee pop-up:** for non-duplicate defects, the run pauses at assignment and a
+pop-up lists candidate assignees for the matched team. Pick one and click
+**Assign & continue** — the live log resumes and finishes. (Duplicates skip this.)
+
+**Pop-ups & toasts:** a missing Gemini key or a fatal quota error shows a blocking
+**error modal**; a non-fatal Jira failure shows a dismissible **warning toast** while
+triage still completes.
+
 **Recommended demo flow (works without any Gemini quota):**
 
 1. Click **"Load sample (duplicate)"** → the form fills with the promo-code 500 bug.
@@ -185,7 +200,10 @@ caveats (free-tier quota, N=5 sample size).
 | `npm install` fails with cert error | Corporate TLS proxy | `$env:NODE_EXTRA_CA_CERTS="..\certs\corp-ca-bundle.pem"` then retry |
 | `POST /triage` returns HTTP 500 with LLM error | Gemini quota or TLS | Check logs for `RESOURCE_EXHAUSTED` or `CERTIFICATE_VERIFY_FAILED` |
 | All `prioritize` results are fallback-based | LLM JSON parsing failing | Check if Gemini is returning valid JSON; look at the WARN in `triage_notes` |
-| Jira ticket not created | Creds missing/invalid, or org blocks API access | Run `python scripts/jira_check.py`. Check `JIRA_BASE_URL` has a single `https://`. The breadcrumb says "Jira not configured" or "Jira create FAILED". |
+| Jira ticket not created/updated | Creds missing/invalid, or org blocks API access | Run `python scripts/jira_check.py`. Check `JIRA_BASE_URL` has a single `https://`. A warning toast + the breadcrumb explain it; triage still completes. |
+| "Fetch" by Jira ID returns nothing / 404 | Wrong key, or Jira not connected | Confirm the key exists; check `GET /jira/status`. The manual form is the fallback. |
+| Assignee pop-up never appears | Duplicate defect (skips assign), or no candidates for the team | Expected for duplicates; otherwise it auto-assigned the team default. |
+| Assignee pop-up appears but resume hangs | Backend restarted between pause and resume (in-memory checkpointer lost the thread) | Re-submit the defect — `MemorySaver` state doesn't survive a restart. |
 | Slack/email not actually sending | Stubs not yet wired | Expected — fill in `app/tools/slack_tool.py` / `email_tool.py` with real calls + credentials |
 
 ### Useful log output

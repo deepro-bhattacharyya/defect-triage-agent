@@ -169,8 +169,8 @@ check_duplicate    ← turn it into a vector, search the backlog
 | **analyze_defect** | **Yes** | Sends text (and any images) to Claude, gets back root cause, category, component as JSON. | This is the "understanding" step. Multimodal so screenshots help. |
 | **prioritize** | **Yes** | Asks Claude for severity (CRITICAL/HIGH/MEDIUM/LOW) and priority (1–4). Then a rule-based safety net forces CRITICAL for danger keywords. | Severity drives everything downstream. The LLM can under-rate a real emergency, so rules back it up. |
 | **escalate** | No | Pages the on-call engineer for CRITICAL bugs only. | Humans must be woken up for true emergencies, fast. |
-| **assign_defect** | No | Maps component → team → a specific developer using a lookup table. | Gets the bug to the people who can fix it, avoiding the 30% mis-routing. |
-| **notify** | No | Posts the outcome to Jira, Slack, and email. | Close the loop so stakeholders know what happened. |
+| **assign_defect** | No | Maps component → team, then **pauses and asks a human to pick the assignee** from a candidate list. | Gets the bug to the right team automatically, but keeps a person in the loop on *who* owns it. |
+| **notify** | No | **Writes the result back to the originating Jira issue** (a triage comment + priority) — or creates a new Bug if the defect didn't come from Jira — then pings Slack/email (stubs). | Close the loop in the system of record so stakeholders see it. |
 
 ### Why these specific design choices
 
@@ -184,6 +184,21 @@ check_duplicate    ← turn it into a vector, search the backlog
 - **Side-effect nodes (escalate/notify) are last and isolated** → we don't page people or
   spam Slack until the decision is final, and we keep all external calls behind a tools
   layer so we can test the brain without actually emailing anyone.
+- **Jira-first input** → instead of typing the bug in, you give a **Jira ID** and the app
+  pulls every field (description, reporter, even screenshots) straight from the ticket.
+  At the end it writes the triage result *back* to that same ticket. Manual entry is the
+  fallback when Jira isn't reachable.
+- **A human picks the assignee** → routing to a *team* is automatic, but the graph
+  **pauses** (LangGraph's `interrupt()`) and shows a person a short list of candidates to
+  choose the actual owner, then resumes. This is the "human-in-the-loop" pattern: automate
+  the tedious 90%, keep judgement where it matters.
+
+> **New concept — pausing a graph (human-in-the-loop).** Normally the agent runs start to
+> finish on its own. For the assignee step we *deliberately stop* mid-run, send the
+> candidate list to the UI, and wait. When the user picks someone, we *resume* exactly
+> where we left off. LangGraph does this with `interrupt()` (pause) and
+> `Command(resume=…)` (continue); a **checkpointer** remembers the paused state, keyed by a
+> per-defect `thread_id`. Duplicates never reach this step, so they never pause.
 
 ---
 
@@ -208,17 +223,20 @@ defect-triage-agent/
 │   │   ├── llm.py            ← shared chat-model client (Gemini dev / Claude prod)
 │   │   ├── vector_store.py   ← ChromaDB wrapper (embeddings + similarity search)
 │   │   ├── certs.py          ← corporate-TLS bootstrap (trusts the proxy CA bundle)
-│   │   ├── jira_tool.py      ← (stub) update Jira tickets
+│   │   ├── jira_tool.py      ← LIVE Jira: fetch/create/update issue, comment, transition
+│   │   ├── assignees.py      ← candidate assignees (live Jira users, else static roster)
 │   │   ├── slack_tool.py     ← (stub) post to Slack
 │   │   ├── email_tool.py     ← (stub) send email
 │   │   └── oncall_tool.py    ← (stub) page on-call
 │   └── api/
-│       └── routes.py         ← FastAPI: POST /triage + serves the React UI at /
+│       └── routes.py         ← FastAPI: POST /triage + /triage/resume + /jira/* + serves the UI
 ├── scripts/
 │   ├── seed_vector_store.py  ← one-time loader: backlog JSON → vector store
+│   ├── jira_check.py         ← Jira connectivity/discovery check
 │   └── evaluate.py           ← metrics runner (severity/dup/assignment/latency)
 ├── frontend/                 ← React 18 + Vite UI (post-v1 addition; thin client over /triage)
-│   └── src/                  ← App.jsx, DefectForm, ResultPanel, api.js
+│   └── src/                  ← App.jsx, api.js, components/ (DefectForm, LogFeed, ResultPanel,
+│                                AssignmentModal, ErrorModal, Toasts)
 ├── tests/
 │   ├── unit/                 ← per-node tests (mocked LLM + store)
 │   ├── integration/          ← full graph, live (5 scenarios)
@@ -349,6 +367,11 @@ This is mostly *why* certain "extra" code exists. None of it is decoration.
 - **FastAPI / uvicorn** — the web framework / server that exposes `POST /triage` (and serves the UI).
 - **Frontend (React + Vite)** — the browser UI in `frontend/` for submitting defects and viewing results; a thin client over the API.
 - **Vite proxy** — in dev, the Vite server forwards `/triage` + `/health` calls to the backend so there's no CORS.
+- **Human-in-the-loop** — pausing the agent so a person decides something (here, the assignee), then resuming. Done with LangGraph `interrupt()` + `Command(resume=…)`.
+- **Checkpointer / thread_id** — what lets a graph pause and resume: it saves the run's state under a `thread_id`. We use `MemorySaver` (in-memory).
+- **ADF (Atlassian Document Format)** — Jira's JSON format for rich text. We flatten it to plain text when reading a Jira issue, and wrap our text in it when writing.
+- **Write-back** — updating the *originating* Jira issue with the triage result (comment + priority) instead of creating a new ticket.
+- **SSE (Server-Sent Events)** — one-way streaming from server to browser; how each node's progress reaches the live log feed.
 - **LangSmith / structlog / Sentry** — tracing / structured logging / crash reporting.
 
 ---

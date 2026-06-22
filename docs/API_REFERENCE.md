@@ -11,11 +11,43 @@ it runs the compiled LangGraph and streams the result back. It adds no triage lo
 
 ---
 
+## Jira endpoints
+
+The primary input flow is **fetch a defect from Jira by ID**, then triage it.
+
+### `GET /jira/status`
+Whether the backend can reach Jira with the configured credentials.
+```json
+{ "connected": true }
+```
+The UI uses this to decide between the Jira-fetch flow and the manual fallback form.
+
+### `GET /jira/issue/{key}`
+Fetch a Jira issue and return it mapped to our defect shape (description flattened
+from ADF, image attachments downloaded + base64-encoded, capped by the image
+guardrails). `200` with the defect dict, or `404` with a reason.
+```json
+{
+  "defect_id": "SCRUM-42",
+  "title": "Checkout 500 on promo code",
+  "description": "Applying a promo code returns 500. Cart is emptied.",
+  "environment": "production",
+  "reporter": "Jane QA",
+  "stack_trace": "",
+  "image_attachments": [{ "media_type": "image/png", "data": "<base64>" }]
+}
+```
+`404`: `{ "detail": "Issue NOPE-1 not found in Jira" }`
+
+---
+
 ## `POST /triage`
 
 Run one defect through the triage graph. The response is a **Server-Sent Event
 stream**, not a single JSON object. Events are emitted in real time as each node
-executes. The connection closes after the final `result` event (or on error).
+executes. The stream ends after the final `result` event, an `error` event, **or**
+an `assignment_required` event (which pauses the run for human assignee selection —
+resume with `POST /triage/resume`).
 
 ### Request body
 
@@ -28,6 +60,7 @@ executes. The connection closes after the final `result` event (or on error).
 | `environment` | string | no | `production` / `staging` / `development` / `test`. Influences severity. |
 | `reporter` | string | no | Who filed it, e.g. `customer-support`. |
 | `image_attachments` | array | no | Screenshots. Each item: `{ "media_type": "image/png", "data": "<base64>" }`. Max 3 images, max 5 MB each, supported types: `image/png`, `image/jpeg`, `image/gif`, `image/webp`. |
+| `source_jira_key` | string | no | Set by the UI when the defect was fetched from Jira. When present, `notify` **updates that existing issue** (comment + priority) instead of creating a new Bug. |
 
 **Minimal valid request:**
 ```json
@@ -54,7 +87,7 @@ The response body is a stream of newline-delimited SSE frames. Each frame is:
 data: {JSON payload}\n\n
 ```
 
-**Three event types:**
+**Event types:** `log`, `warning`, `assignment_required`, `result`, `error`.
 
 #### `log` — emitted once per node, as the node completes
 
@@ -70,6 +103,24 @@ data: {JSON payload}\n\n
 
 You receive one `log` event per node that executes. Duplicates skip `analyze_defect`,
 `prioritize`, `assign_defect`, and `notify`, so they produce 3 `log` events total.
+
+#### `warning` — non-fatal issue; triage still completes (UI shows a dismissible toast)
+
+```json
+{ "type": "warning", "message": "Jira rejected the request — check credentials / permissions." }
+```
+Emitted e.g. when a Jira write fails (401/403/429/network) but the agent finishes anyway.
+
+#### `assignment_required` — the run PAUSED for human assignee selection
+
+```json
+{ "type": "assignment_required", "thread_id": "a1b2c3…", "team": "Payments",
+  "candidates": ["alice@example.com", "bob@example.com"] }
+```
+The stream ends here. Show the candidates, let the user pick, then call
+`POST /triage/resume` with the `thread_id` to continue. **Duplicates never reach
+`assign_defect`, so this event never fires on the duplicate path.** If a team has no
+candidates, the graph auto-assigns the default and this event is skipped.
 
 #### `result` — the final event, carries the complete TriageState
 
@@ -164,14 +215,31 @@ while (-not $sr.EndOfStream) {
 
 ---
 
+## `POST /triage/resume`
+
+Resume a triage that paused with `assignment_required`, supplying the chosen
+assignee. Streams the remaining events (assign completion, notify, `result`) as SSE,
+exactly like `/triage`.
+
+**Request body:**
+```json
+{ "thread_id": "a1b2c3…", "assignee": "bob@example.com" }
+```
+The `thread_id` must be the one from the `assignment_required` event. The frontend
+continues consuming this stream into the **same** live-log feed.
+
+---
+
 ## `GET /health`
 
-Liveness check.
+Liveness check + whether the Gemini key is configured.
 
 **Response `200 OK`:**
 ```json
-{ "status": "ok" }
+{ "status": "ok", "llm_available": true }
 ```
+`llm_available` is `false` when `GOOGLE_API_KEY` is unset — the UI shows a blocking
+error pop-up on load in that case.
 
 ---
 

@@ -204,6 +204,15 @@ defect-triage-agent/
 > **Frontend (added beyond original v1 scope):** a React + Vite single-page UI in
 > `frontend/` for submitting defects and viewing the triage result. Thin client over
 > `POST /triage`; the backend serves the built app at `/`. See `frontend/README.md`.
+>
+> **Post-v1 extensions (implemented beyond this original spec — see
+> [HANDOFF.md](HANDOFF.md) Phase 7 and [ARCHITECTURE.md](ARCHITECTURE.md) for details):**
+> live Jira integration (fetch a defect by ID → auto-fill; write the triage result back
+> to the source issue, else create a Bug); SSE streaming on `POST /triage` with a live log
+> feed; error modal / warning toasts; and a **human-in-the-loop** pause where `assign_defect`
+> uses LangGraph `interrupt()` to let a user pick the assignee, resumed via
+> `POST /triage/resume`. These are documented in `docs/` but are not part of this original
+> approved plan.
 
 ### Core Graph Definition
 

@@ -8,14 +8,13 @@ function Banner({ result }) {
   return null
 }
 
-export default function ResultPanel({ result, loading, error }) {
+export default function ResultPanel({ result, loading }) {
   return (
     <section className="card">
       <h2>Result</h2>
 
       {loading && <div className="loading">⏳ Triaging… (LLM steps can take a few seconds)</div>}
-      {error && !loading && <div className="error">{error}</div>}
-      {!loading && !error && !result && (
+      {!loading && !result && (
         <div className="placeholder">Submit a defect to see the triage outcome.</div>
       )}
 
@@ -29,13 +28,30 @@ export default function ResultPanel({ result, loading, error }) {
             {result.status && <span className="badge status">{result.status}</span>}
           </div>
 
+          {result.jira_key && (
+            <div className="jira-link">
+              🔗 Jira:{' '}
+              {result.jira_url ? (
+                <a href={result.jira_url} target="_blank" rel="noreferrer">{result.jira_key}</a>
+              ) : (
+                <strong>{result.jira_key}</strong>
+              )}
+            </div>
+          )}
+
+          {result.root_cause && (
+            <div className="root-cause">
+              <span className="rc-label">Root cause</span>
+              <p>{result.root_cause}</p>
+            </div>
+          )}
+
           <dl className="kv">
             {result.defect_id && (<><dt>Defect ID</dt><dd>{result.defect_id}</dd></>)}
             {result.assigned_team && (<><dt>Team</dt><dd>{result.assigned_team}</dd></>)}
             {result.assigned_to && (<><dt>Assignee</dt><dd>{result.assigned_to}</dd></>)}
             {result.category && (<><dt>Category</dt><dd>{result.category}</dd></>)}
             {result.component && (<><dt>Component</dt><dd>{result.component}</dd></>)}
-            {result.root_cause && (<><dt>Root cause</dt><dd>{result.root_cause}</dd></>)}
           </dl>
 
           {Array.isArray(result.triage_notes) && result.triage_notes.length > 0 && (

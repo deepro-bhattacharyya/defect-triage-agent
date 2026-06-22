@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { fetchJiraIssue } from '../api.js'
 
 const EMPTY = {
   title: '',
@@ -31,34 +32,90 @@ function fileToAttachment(file) {
   })
 }
 
-export default function DefectForm({ onSubmit, loading }) {
+// jiraConnected (Task 1): when true the primary input is a Jira ID + Fetch button
+// that auto-populates every field; the manual form is the fallback when Jira is down.
+export default function DefectForm({ onSubmit, loading, jiraConnected }) {
   const [fields, setFields] = useState(EMPTY)
-  const [imageFile, setImageFile] = useState(null)
+  const [jiraImages, setJiraImages] = useState([]) // attachments pulled from Jira
+  const [imageFile, setImageFile] = useState(null) // optional manual screenshot
+  const [jiraId, setJiraId] = useState('')
+  const [fetching, setFetching] = useState(false)
+  const [fetchError, setFetchError] = useState(null)
+  const [sourceJiraKey, setSourceJiraKey] = useState('') // set when fetched from Jira → write-back
 
   function update(key) {
     return (e) => setFields((f) => ({ ...f, [key]: e.target.value }))
   }
 
+  async function handleFetch() {
+    if (!jiraId.trim()) return
+    setFetching(true)
+    setFetchError(null)
+    setJiraImages([])
+    try {
+      const d = await fetchJiraIssue(jiraId.trim())
+      setFields({
+        title: d.title || '',
+        defect_id: d.defect_id || '',
+        environment: d.environment || '',
+        description: d.description || '',
+        stack_trace: d.stack_trace || '',
+        reporter: d.reporter || '',
+      })
+      setJiraImages(d.image_attachments || [])
+      setSourceJiraKey(d.defect_id || jiraId.trim()) // mark as Jira-sourced → write-back
+    } catch (e) {
+      setFetchError(e.message)
+    } finally {
+      setFetching(false)
+    }
+  }
+
   async function handleSubmit(e) {
     e.preventDefault()
-    const payload = { ...fields }
-    payload.image_attachments = imageFile ? [await fileToAttachment(imageFile)] : []
-    onSubmit(payload)
+    const manual = imageFile ? [await fileToAttachment(imageFile)] : []
+    onSubmit({
+      ...fields,
+      image_attachments: [...jiraImages, ...manual],
+      source_jira_key: sourceJiraKey,
+    })
   }
 
   return (
     <section className="card">
       <h2>Submit a defect</h2>
+
+      {jiraConnected ? (
+        <div className="jira-fetch">
+          <label>
+            Jira defect ID
+            <div className="fetch-row">
+              <input
+                type="text"
+                value={jiraId}
+                onChange={(e) => setJiraId(e.target.value)}
+                placeholder="SCRUM-42"
+              />
+              <button type="button" onClick={handleFetch} disabled={fetching || loading}>
+                {fetching ? 'Fetching…' : 'Fetch'}
+              </button>
+            </div>
+          </label>
+          {fetchError && <div className="error">{fetchError}</div>}
+          {jiraImages.length > 0 && (
+            <div className="hint">📎 {jiraImages.length} image(s) pulled from Jira</div>
+          )}
+          <p className="hint">Fetched fields below are editable before you triage.</p>
+        </div>
+      ) : (
+        <div className="hint">Jira not connected — enter the defect manually.</div>
+      )}
+
       <form onSubmit={handleSubmit}>
         <label>
           Title <span className="req">*</span>
-          <input
-            type="text"
-            required
-            value={fields.title}
-            onChange={update('title')}
-            placeholder="Applying a promo code at checkout causes a 500 error"
-          />
+          <input type="text" required value={fields.title} onChange={update('title')}
+            placeholder="Applying a promo code at checkout causes a 500 error" />
         </label>
 
         <div className="row">
@@ -96,11 +153,8 @@ export default function DefectForm({ onSubmit, loading }) {
           </label>
           <label>
             Screenshot (optional)
-            <input
-              type="file"
-              accept="image/png,image/jpeg,image/gif,image/webp"
-              onChange={(e) => setImageFile(e.target.files[0] || null)}
-            />
+            <input type="file" accept="image/png,image/jpeg,image/gif,image/webp"
+              onChange={(e) => setImageFile(e.target.files[0] || null)} />
           </label>
         </div>
 
@@ -108,12 +162,8 @@ export default function DefectForm({ onSubmit, loading }) {
           <button type="submit" disabled={loading}>
             {loading ? 'Triaging…' : 'Triage defect'}
           </button>
-          <button
-            type="button"
-            className="ghost"
-            disabled={loading}
-            onClick={() => { setFields(SAMPLE_DUPLICATE); setImageFile(null) }}
-          >
+          <button type="button" className="ghost" disabled={loading}
+            onClick={() => { setFields(SAMPLE_DUPLICATE); setImageFile(null); setJiraImages([]); setSourceJiraKey('') }}>
             Load sample (duplicate)
           </button>
         </div>

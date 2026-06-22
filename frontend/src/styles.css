@@ -126,6 +126,21 @@ button.ghost { background: transparent; color: var(--muted); border: 1px solid v
 /* right column stacks the live log feed above the result */
 .right-col { display: flex; flex-direction: column; gap: 20px; }
 
+/* Jira fetch-by-ID block */
+.jira-fetch { padding: 12px 14px; margin-bottom: 16px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; }
+.jira-fetch label { margin-bottom: 0; }
+.fetch-row { display: flex; gap: 8px; align-items: stretch; }
+.fetch-row input { flex: 1; }
+.fetch-row button { flex: 0 0 auto; white-space: nowrap; }
+.hint { font-size: 0.8rem; color: var(--muted); margin: 8px 0 0; }
+
+/* result: prominent root cause + Jira link */
+.jira-link { margin-bottom: 12px; font-size: 0.9rem; }
+.jira-link a { color: var(--accent); font-weight: 700; }
+.root-cause { margin-bottom: 16px; padding: 12px 14px; background: var(--panel-2); border-left: 3px solid var(--accent); border-radius: 0 8px 8px 0; }
+.root-cause .rc-label { display: block; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); margin-bottom: 4px; }
+.root-cause p { margin: 0; font-size: 0.95rem; line-height: 1.4; }
+
 .pulse { color: var(--low); font-size: 0.8rem; font-weight: 600; animation: blink 1.2s ease-in-out infinite; }
 @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 
@@ -152,3 +167,22 @@ button.ghost { background: transparent; color: var(--muted); border: 1px solid v
   animation: blink 1s ease-in-out infinite;
 }
 @keyframes fadein { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+/* error modal (blocking) */
+.modal-overlay { position: fixed; inset: 0; background: rgba(2, 6, 23, 0.7); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+.modal { background: var(--panel); border: 1px solid var(--crit); border-radius: 12px; padding: 22px 24px; max-width: 480px; margin: 20px; box-shadow: 0 20px 60px rgba(0,0,0,0.5); }
+.modal h3 { margin: 0 0 12px; color: #fecaca; }
+.modal p { margin: 0 0 18px; line-height: 1.5; color: var(--text); }
+.modal-actions { display: flex; justify-content: flex-end; }
+
+/* warning toasts (dismissible, bottom-right) */
+.toasts { position: fixed; bottom: 20px; right: 20px; display: flex; flex-direction: column; gap: 10px; z-index: 900; max-width: 380px; }
+.toast { display: flex; align-items: flex-start; gap: 10px; background: #3b2f0b; border: 1px solid var(--med); color: #fde68a; padding: 11px 14px; border-radius: 8px; font-size: 0.85rem; box-shadow: 0 8px 24px rgba(0,0,0,0.4); animation: fadein 0.3s ease-out; }
+.toast-x { background: transparent; border: none; color: #fde68a; font-size: 1.2rem; line-height: 1; cursor: pointer; padding: 0 0 0 4px; }
+
+/* assignment picker modal */
+.candidates { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 18px; }
+.candidate { display: flex; align-items: center; gap: 10px; padding: 9px 12px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; cursor: pointer; font-size: 0.9rem; }
+.candidate input { width: auto; margin: 0; }
+.modal.assign { border-color: var(--accent); }
+.modal.assign h3 { color: var(--text); }

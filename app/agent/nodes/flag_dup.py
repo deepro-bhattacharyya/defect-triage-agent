@@ -6,7 +6,7 @@ and best-effort transitions it to a closed state. Degrades gracefully if Jira is
 unavailable — the node always finishes.
 """
 
-from app.tools.jira_tool import add_comment, create_issue, transition_to
+from app.tools.jira_tool import add_comment, browse_url, create_issue, transition_to, warning_for
 
 
 def flag_duplicate(state: dict) -> dict:
@@ -40,8 +40,13 @@ def flag_duplicate(state: dict) -> dict:
     else:
         note = f"[flag_duplicate] Jira create FAILED; {defect_id} flagged duplicate of {parent_id}"
 
-    return {
+    out = {
         "status": "closed_duplicate",
         "jira_key": jira_key,
+        "jira_url": browse_url(jira_key),
         "triage_notes": [note],
     }
+    warning = warning_for(jira)  # non-fatal Jira failure → surfaced as a UI toast
+    if warning:
+        out["warnings"] = [warning]
+    return out

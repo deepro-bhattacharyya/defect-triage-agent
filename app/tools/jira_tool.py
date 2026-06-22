@@ -17,6 +17,7 @@ Jira Cloud v3 requires the description/comment body in Atlassian Document Format
 (ADF), not plain text — `_adf()` handles that. Never logs secrets.
 """
 
+import base64
 import os
 import re
 
@@ -29,6 +30,10 @@ log = structlog.get_logger(__name__)
 
 _TIMEOUT = 20
 _HEADERS = {"Accept": "application/json", "Content-Type": "application/json"}
+
+# Image guardrails for attachments pulled off a Jira issue (mirrors intake_defect;
+# kept here to avoid a tools→nodes import). intake re-validates regardless.
+_SUPPORTED_IMAGE_TYPES = {"image/png", "image/jpeg", "image/gif", "image/webp"}
 
 
 def _config():
@@ -62,6 +67,116 @@ def _adf(text: str) -> dict:
             for line in lines
         ],
     }
+
+
+def _adf_to_text(adf) -> str:
+    """Flatten an Atlassian Document Format value (or plain string) to plain text."""
+    if not adf:
+        return ""
+    if isinstance(adf, str):
+        return adf
+    parts: list[str] = []
+
+    def walk(node):
+        if isinstance(node, list):
+            for n in node:
+                walk(n)
+        elif isinstance(node, dict):
+            ntype = node.get("type")
+            if ntype == "text":
+                parts.append(node.get("text", ""))
+            elif ntype == "hardBreak":
+                parts.append("\n")
+            for child in node.get("content", []) or []:
+                walk(child)
+            if ntype in ("paragraph", "heading"):
+                parts.append("\n")
+
+    walk(adf)
+    return "".join(parts).strip()
+
+
+def _download_attachments(attachments, auth) -> list:
+    """Download image attachments off a Jira issue as {media_type, data(base64)},
+    applying the image guardrails (count, size, supported types)."""
+    max_mb = float(os.environ.get("MAX_IMAGE_MB", "5"))
+    max_n = int(os.environ.get("MAX_IMAGES", "3"))
+    out = []
+    for att in attachments or []:
+        if len(out) >= max_n:
+            break
+        mime = (att.get("mimeType") or "").lower()
+        if mime not in _SUPPORTED_IMAGE_TYPES:
+            continue
+        if att.get("size", 0) > max_mb * 1024 * 1024:
+            continue
+        url = att.get("content")
+        if not url:
+            continue
+        try:
+            rr = requests.get(url, auth=auth, timeout=_TIMEOUT)
+            if rr.status_code == 200:
+                out.append({"media_type": mime, "data": base64.b64encode(rr.content).decode()})
+        except Exception:  # noqa: BLE001 — skip an attachment we can't fetch
+            continue
+    return out
+
+
+def get_issue(key: str) -> dict:
+    """Fetch a Jira issue and map it to our defect shape. Returns
+    {"ok": True, "defect": {...}} or {"ok": False, "reason": ...}. Never raises."""
+    if not _configured():
+        return {"ok": False, "reason": "Jira not configured"}
+    if not key:
+        return {"ok": False, "reason": "no issue key given"}
+
+    configure_corporate_tls()
+    base, email, token = _config()
+    try:
+        r = requests.get(
+            f"{base}/rest/api/3/issue/{key}",
+            params={"fields": "summary,description,environment,reporter,attachment,priority,status"},
+            auth=(email, token), headers={"Accept": "application/json"}, timeout=_TIMEOUT,
+        )
+        if r.status_code == 404:
+            return {"ok": False, "reason": f"Issue {key} not found in Jira"}
+        if r.status_code in (401, 403):
+            return {"ok": False, "reason": "Jira rejected the request (auth)", "status": r.status_code}
+        if r.status_code != 200:
+            return {"ok": False, "reason": f"Jira returned HTTP {r.status_code}", "status": r.status_code}
+
+        data = r.json()
+        f = data.get("fields", {}) or {}
+        reporter = f.get("reporter") or {}
+        env = f.get("environment")
+        defect = {
+            "defect_id": data.get("key", key),
+            "title": f.get("summary") or "",
+            "description": _adf_to_text(f.get("description")),
+            "environment": _adf_to_text(env) if isinstance(env, dict) else (env or ""),
+            "reporter": reporter.get("displayName") or reporter.get("emailAddress") or "",
+            "stack_trace": "",  # not a standard Jira field
+            "image_attachments": _download_attachments(f.get("attachment"), (email, token)),
+        }
+        log.info("jira.get_issue", key=defect["defect_id"], images=len(defect["image_attachments"]))
+        return {"ok": True, "defect": defect}
+    except Exception as e:  # noqa: BLE001
+        log.warning("jira.get_issue.error", error=str(e)[:200])
+        return {"ok": False, "reason": str(e)[:200]}
+
+
+def get_jira_status() -> dict:
+    """Lightweight connectivity check. Returns {"connected": bool, ...}. Never raises."""
+    if not _configured():
+        return {"connected": False, "reason": "not configured"}
+    configure_corporate_tls()
+    base, email, token = _config()
+    try:
+        r = requests.get(f"{base}/rest/api/3/myself", auth=(email, token),
+                         headers={"Accept": "application/json"}, timeout=_TIMEOUT)
+        return {"connected": r.status_code == 200, "status": r.status_code}
+    except Exception as e:  # noqa: BLE001
+        return {"connected": False, "reason": str(e)[:200]}
 
 
 def create_issue(*, summary: str, description: str, priority: str | None = None,
@@ -100,6 +215,46 @@ def create_issue(*, summary: str, description: str, priority: str | None = None,
         return {"ok": False, "status": r.status_code, "error": r.text[:300]}
     except Exception as e:  # noqa: BLE001 — best-effort, must never raise
         log.warning("jira.create_issue.error", error=str(e)[:200])
+        return {"ok": False, "error": str(e)[:200]}
+
+
+def warning_for(result: dict) -> str | None:
+    """Map a failed jira_tool result to a friendly, user-facing warning string —
+    or None if it's a success or an expected "not configured" skip (no warning)."""
+    if not isinstance(result, dict) or result.get("ok"):
+        return None
+    if result.get("skipped"):
+        return None  # Jira simply not configured — expected, not a warning
+    status = result.get("status")
+    if status in (401, 403):
+        return "Jira rejected the request — check credentials / permissions."
+    if status == 429:
+        return "Jira is rate-limiting requests — the ticket wasn't updated; retry shortly."
+    reason = result.get("reason") or result.get("error") or "unknown error"
+    return f"Jira unreachable — the ticket wasn't updated ({reason})."
+
+
+def browse_url(key: str) -> str:
+    """Human-facing URL for an issue key, or "" if Jira/key is not configured."""
+    base, _, _ = _config()
+    return f"{base}/browse/{key}" if (base and key) else ""
+
+
+def update_issue(issue_key: str, fields: dict) -> dict:
+    """Update fields on an existing issue (e.g. priority). Best-effort."""
+    if not _configured() or not issue_key or not fields:
+        return {"ok": False, "skipped": True}
+    configure_corporate_tls()
+    base, email, token = _config()
+    try:
+        r = requests.put(f"{base}/rest/api/3/issue/{issue_key}", json={"fields": fields},
+                         auth=(email, token), headers=_HEADERS, timeout=_TIMEOUT)
+        ok = r.status_code in (200, 204)
+        if not ok:
+            log.warning("jira.update_issue.failed", key=issue_key, status=r.status_code)
+        return {"ok": ok, "status": r.status_code}
+    except Exception as e:  # noqa: BLE001
+        log.warning("jira.update_issue.error", error=str(e)[:200])
         return {"ok": False, "error": str(e)[:200]}
 
 

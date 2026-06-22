@@ -9,14 +9,17 @@ doc explains the structure that delivers it.
 
 ## 1. The one-paragraph mental model
 
-A bug report enters as a plain dict. It travels through a **LangGraph state
-machine**: it's normalized (`intake`), checked against the existing backlog in a
-**vector store** (`check_duplicate`) *before* any LLM is touched, and then either
-short-circuits (confirmed duplicate) or flows on to an **LLM** that analyzes root
-cause (`analyze`) and rates urgency (`prioritize`). Deterministic rules then route
-it — page on-call for CRITICAL, pick an owning team — and side-effect nodes close
-the loop (Jira live; Slack/email stubbed). One shared `TriageState` dict carries
-everything; every node leaves a breadcrumb in `triage_notes` for the audit trail.
+A bug report enters as a plain dict — typically **fetched from Jira by ID** (or
+entered manually). It travels through a **LangGraph state machine**: it's normalized
+(`intake`), checked against the existing backlog in a **vector store**
+(`check_duplicate`) *before* any LLM is touched, and then either short-circuits
+(confirmed duplicate) or flows on to an **LLM** that analyzes root cause (`analyze`)
+and rates urgency (`prioritize`). Deterministic rules route it — page on-call for
+CRITICAL, pick an owning team — then the graph **pauses for a human to choose the
+assignee** (`interrupt`) before side-effect nodes close the loop: `notify` **writes
+back to the source Jira issue or creates a Bug** (Slack/email stubbed). One shared
+`TriageState` dict carries everything; every node leaves a breadcrumb in
+`triage_notes` for the audit trail, and progress streams to the UI as SSE.
 The expensive/unreliable parts (LLM, embeddings, integrations) are each isolated
 behind a single wrapper, so the graph stays testable and the dev/prod swaps touch
 one file.
@@ -102,10 +105,10 @@ and carry `RetryPolicy(max_attempts=3)`; the rest are deterministic.
 | `check_duplicate` | No | Vector similarity vs. backlog; classify duplicate / regression / new |
 | `analyze_defect` | **Yes** | Root cause, category, component (multimodal: text + images) |
 | `prioritize` | **Yes** | Severity + priority, with rule override & fallback |
-| `assign_defect` | No | Component → team → developer routing |
+| `assign_defect` | No | Component → team, then **`interrupt()` for human assignee pick** |
 | `escalate` | No | Page on-call (CRITICAL only) |
-| `flag_duplicate` | No | Link to parent ticket, close as duplicate |
-| `notify` | No | Create Jira Bug (live) + Slack + email (stubs) |
+| `flag_duplicate` | No | Create + close a duplicate Bug in Jira (live) |
+| `notify` | No | Update source Jira issue **or** create a Bug (live) + Slack + email (stubs) |
 
 Two **conditional edges** are the only branching:
 
@@ -115,6 +118,13 @@ Two **conditional edges** are the only branching:
 
 Everything else is a straight edge. `escalate` rejoins at `assign_defect`, so the
 critical path is `… → escalate → assign_defect → notify`.
+
+**Human-in-the-loop pause.** `assign_defect` calls LangGraph's `interrupt()` to pause
+for a human to pick the assignee, so the graph is compiled with a **`MemorySaver`
+checkpointer** and every run carries a `thread_id`. The API streams an
+`assignment_required` event and `POST /triage/resume` continues via
+`Command(resume=<assignee>)`. If a team has no candidates the node auto-assigns and
+doesn't pause; duplicates never reach `assign_defect`, so they never pause.
 
 ---
 
@@ -204,7 +214,8 @@ runs end-to-end with no credentials.
 | `vector_store.py` | ChromaDB wrapper + injectable embedder | live (Gemini embeddings) |
 | `parsing.py` | Defensive JSON extraction | pure |
 | `certs.py` | Corporate-TLS bootstrap (§9) | env setup |
-| `jira_tool.py` | `create_issue` / `add_comment` / `transition_to` | **LIVE** (REST API v3) |
+| `jira_tool.py` | `get_issue` / `create_issue` / `update_issue` / `add_comment` / `transition_to` / `get_jira_status` / `warning_for` | **LIVE** (REST API v3) |
+| `assignees.py` | `get_team_candidates` (live Jira assignable users, else static roster) | **LIVE** |
 | `slack_tool.py` | `post_message` | **stub** |
 | `email_tool.py` | `send_email` | **stub** |
 | `oncall_tool.py` | `page_oncall` | **stub** |
@@ -260,7 +271,7 @@ Each of these can change in one place without touching the rest of the architect
 
 Two tiers, mirroring the layer split:
 
-- **Unit (`tests/unit/`, 56 tests)** — one node/tool at a time with the LLM and
+- **Unit (`tests/unit/`, 82 tests)** — one node/tool at a time with the LLM and
   vector store **mocked**. Fast, deterministic, no API key. Includes full-graph
   *wiring* tests (mocked LLM/store) that exercise every branch — new, duplicate,
   regression, critical-escalate.
@@ -329,5 +340,9 @@ even when the daily quota is gone. See [../frontend/README.md](../frontend/READM
 - **Severity is the one non-deterministic signal.** Routing, duplicate, and
   regression detection are deterministic; severity depends on the LLM, with the
   rule override (catch emergencies) and rule fallback (always valid) as guards.
-- **Jira is live; Slack/email/on-call are stubs.** They log intent only — wiring the
-  real APIs is the obvious next step beyond this POC.
+- **Jira is live (fetch, write-back, create); Slack/email/on-call are stubs.** They log
+  intent only — wiring the real APIs is the obvious next step beyond this POC.
+- **The checkpointer is in-memory (`MemorySaver`).** A paused (awaiting-assignee) run is
+  held in process memory keyed by `thread_id`; a backend restart loses it, and it doesn't
+  scale across workers. Swap for a persistent checkpointer (e.g. SQLite/Postgres) for
+  production.

@@ -8,6 +8,7 @@ import pytest
 
 from app.agent.graph import build_graph
 from app.agent.nodes import analyze as analyze_mod
+from app.agent.nodes import assign as assign_mod
 from app.agent.nodes import duplicate as dup_mod
 from app.agent.nodes import prioritize as prio_mod
 from app.tools.vector_store import Document
@@ -42,10 +43,14 @@ ANALYZE_JSON = '{"category": "backend", "component": "checkout-service", "root_c
 
 
 def _patch(monkeypatch, store_pairs, prio_json='{"severity": "LOW", "priority": 4}',
-           analyze_json=ANALYZE_JSON):
+           analyze_json=ANALYZE_JSON, candidates=None):
     monkeypatch.setattr(dup_mod, "get_vector_store", lambda: FakeStore(store_pairs))
     monkeypatch.setattr(analyze_mod, "get_llm", lambda: FakeLLM(analyze_json))
     monkeypatch.setattr(prio_mod, "get_llm", lambda: FakeLLM(prio_json))
+    # By default no candidates → assign_defect auto-assigns and does NOT interrupt,
+    # so the straight-through tests run end to end without a checkpointer.
+    monkeypatch.setattr(assign_mod, "get_team_candidates",
+                        lambda team, fallback=None: list(candidates or []))
 
 
 @pytest.fixture
@@ -112,3 +117,51 @@ def test_critical_routes_through_escalate(monkeypatch, graph):
     assert out["severity"] == "CRITICAL"
     assert out["status"] == "notified"
     assert "[escalate]" in _notes(out)
+
+
+def test_assign_interrupts_then_resumes(monkeypatch):
+    """With candidates available, assign_defect pauses (interrupt) for a human pick,
+    then Command(resume=...) finishes into notify. Needs a checkpointer."""
+    from langgraph.checkpoint.memory import MemorySaver
+    from langgraph.types import Command
+
+    _patch(monkeypatch, store_pairs=[], prio_json='{"severity": "LOW", "priority": 4}',
+           candidates=["alice@x.com", "bob@x.com"])
+    graph = build_graph(MemorySaver())
+    cfg = {"configurable": {"thread_id": "t-assign"}}
+
+    # First run pauses at assign_defect.
+    paused = graph.invoke(
+        {"defect_id": "DEF-9", "title": "Submit button misaligned",
+         "description": "purely visual", "environment": "staging"},
+        config=cfg,
+    )
+    assert "__interrupt__" in paused
+    snap = graph.get_state(cfg)
+    assert snap.next == ("assign_defect",)
+    intr = snap.tasks[0].interrupts[0]
+    assert intr.value["team"] == "Payments"  # checkout-service -> Payments
+    assert "alice@x.com" in intr.value["candidates"]
+    # notify hasn't run yet
+    assert paused.get("status") != "notified"
+
+    # Human picks bob → resume finishes the graph.
+    final = graph.invoke(Command(resume="bob@x.com"), config=cfg)
+    assert final["assigned_to"] == "bob@x.com"
+    assert final["status"] == "notified"
+
+
+def test_duplicate_never_reaches_assign(monkeypatch):
+    """Duplicates short-circuit, so the assignment interrupt must NOT fire."""
+    from langgraph.checkpoint.memory import MemorySaver
+
+    _patch(monkeypatch, store_pairs=[(_doc("DEF-101", "OPEN"), 0.95)],
+           candidates=["alice@x.com"])
+    graph = build_graph(MemorySaver())
+    cfg = {"configurable": {"thread_id": "t-dup"}}
+    out = graph.invoke(
+        {"defect_id": "DEF-203", "title": "Promo 500", "description": "checkout"},
+        config=cfg,
+    )
+    assert "__interrupt__" not in out
+    assert out["status"] == "closed_duplicate"

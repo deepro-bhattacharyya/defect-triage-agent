@@ -3,8 +3,11 @@
 How a single defect travels through the system, end to end. Follow the numbered
 steps; worked examples at the bottom tie it together.
 
-The entry point is always `POST /triage` in `app/api/routes.py`, which drives
-the compiled graph via `_graph.astream()` and streams each step back as SSE.
+The primary input is **fetching a defect from Jira by ID** (`GET /jira/issue/{key}`),
+which auto-fills the form; manual entry is the fallback when Jira isn't connected.
+Either way the entry point is `POST /triage` in `app/api/routes.py`, which drives the
+compiled graph via `_graph.astream()` and streams each step back as SSE. The run may
+**pause** for human assignee selection and continue via `POST /triage/resume`.
 
 ---
 
@@ -51,7 +54,7 @@ the compiled graph via `_graph.astream()` and streams each step back as SSE.
      └── no  ────────────────┤
                              ▼
     ┌─────────────────────────┐
-    │  5. assign_defect       │  component → team → developer
+    │  5. assign_defect       │  component → team, then PAUSE for human assignee pick
     └────────────┬────────────┘
                  │  breadcrumb ──► SSE log event
                  ▼
@@ -170,23 +173,42 @@ table (`TEAM_ROUTING` in `assign.py`). First match wins:
 The match is case-insensitive. To add a team, edit `TEAM_ROUTING` in
 `app/agent/nodes/assign.py`.
 
+**Human-in-the-loop assignee selection.** Once the team is known, `assign_defect`
+gathers candidate assignees (live Jira assignable users via `app/tools/assignees.py`,
+else the static `TEAM_MEMBERS` roster) and calls LangGraph's `interrupt()` to **pause
+the graph**. The API emits an `assignment_required` SSE event (`{thread_id, team,
+candidates}`) and the stream ends. The user picks an assignee in a pop-up; the UI calls
+`POST /triage/resume` with the `thread_id`, which resumes the graph via
+`Command(resume=<assignee>)` — `interrupt()` returns the choice, `assigned_to` is set,
+and flow continues into `notify`. If there are no candidates, it auto-assigns the team
+default and does **not** pause. (This requires the graph to be compiled with a
+checkpointer — `MemorySaver` — and every run to carry a `thread_id`.)
+
+**Duplicates never reach `assign_defect`**, so the assignment pause never happens on
+the duplicate path.
+
 ---
 
 ## Step 7 — Notifications (`notify`)
 
 `notify` does three things:
-1. **`jira_tool.create_issue(...)` — LIVE.** Creates a real Jira Bug in the
-   `JIRA_PROJECT_KEY` project, mapping severity → Jira priority (CRITICAL→Highest,
-   HIGH→High, MEDIUM→Medium, LOW→Low), with `auto-triaged` + team + component labels.
-   The created key (e.g. `SCRUM-9`) is stored in `state["jira_key"]` and the breadcrumb.
+1. **Jira — LIVE, update *or* create.**
+   - If the defect came **from** Jira (`state["source_jira_key"]` is set — the UI fetched
+     it via `GET /jira/issue/{key}`), it **updates that existing issue**: adds a triage
+     comment (root cause, category, component, severity, assignee) and best-effort sets
+     its priority.
+   - Otherwise it **creates a new Bug** in `JIRA_PROJECT_KEY`, mapping severity → Jira
+     priority (CRITICAL→Highest, HIGH→High, MEDIUM→Medium, LOW→Low), with `auto-triaged`
+     + team + component labels.
+   The acted-on key + browse URL are stored in `state["jira_key"]` / `state["jira_url"]`.
 2. `slack_tool.post_message("#defect-triage", summary)` — **stub** (logs only).
 3. `email_tool.send_email(assignee, subject, body)` — **stub** (logs only).
 
 Jira is **best-effort**: if credentials are missing or Jira is unreachable, the call
-returns `{"ok": False, ...}`, the breadcrumb records it (e.g. "Jira not configured" or
-"Jira create FAILED"), and triage still completes — it never raises. Slack/email remain
-stubs; activate them by adding credentials to `.env` and replacing the stub body in
-`app/tools/slack_tool.py` / `email_tool.py`.
+returns `{"ok": False, ...}` and triage still completes — it never raises. A real
+failure (401/403/429/network) additionally surfaces a non-fatal `warning` SSE event
+(`app/tools/jira_tool.py::warning_for`) which the UI shows as a dismissible toast.
+Slack/email remain stubs.
 
 For **duplicates**, `flag_duplicate` likewise creates a Jira Bug labeled `duplicate`,
 comments which parent it duplicates, and best-effort transitions it to a closed status.
@@ -205,9 +227,11 @@ data: {"type": "log", "node": "check_duplicate", "line": "[check_duplicate] DUPL
 data: {"type": "result", "state": { ...final TriageState... }}
 ```
 
-The frontend's `LogFeed` component renders each `log` event as it arrives. The
-`result` event renders the full result panel. On an error, an `error` event is sent
-instead.
+The frontend's `LogFeed` renders each `log` event as it arrives; the `result` event
+renders the result panel (with root cause prominent + a Jira link). Other events:
+`warning` → dismissible toast; `assignment_required` → assignee-picker pop-up (then
+`/triage/resume` stitches the remaining events into the same feed); `error` → blocking
+modal. The full event list is in [API_REFERENCE.md](API_REFERENCE.md).
 
 ---
 

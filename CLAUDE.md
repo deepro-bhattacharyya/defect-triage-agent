@@ -67,10 +67,10 @@ START → intake_defect → check_duplicate → ┌─ DUPLICATE  → flag_dupli
 | `check_duplicate` | No  | Vector similarity vs backlog; flag regression if match is RESOLVED/CLOSED |
 | `analyze_defect`  | Yes | Root cause, category, component (multimodal: text + base64 images) |
 | `prioritize`      | Yes | Severity (CRITICAL/HIGH/MEDIUM/LOW) + priority (1–4) |
-| `assign_defect`   | No  | Component → team → developer routing |
+| `assign_defect`   | No  | Component → team, then `interrupt()` for human assignee pick (HITL) |
 | `escalate`        | No  | Page on-call for CRITICAL bugs |
-| `flag_duplicate`  | No  | Link to parent ticket, close as duplicate |
-| `notify`          | No  | Create Jira Bug (live) + Slack + email (stubs) |
+| `flag_duplicate`  | No  | Create + close a duplicate Bug in Jira (live) |
+| `notify`          | No  | Update source Jira issue or create a Bug (live) + Slack + email (stubs) |
 
 ### Key constants (do not change without flagging)
 - `SIMILARITY_THRESHOLD = 0.80` — at/above = match. **Recalibrated from the plan's

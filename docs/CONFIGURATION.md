@@ -109,12 +109,40 @@ tolerates strings like `"PaymentClient"`, `"Profile Page"`, etc.
 
 ---
 
+## Assignee candidates (human-in-the-loop)
+
+After routing to a team, `assign_defect` pauses for a human to pick the assignee.
+The candidate list comes from `app/tools/assignees.py::get_team_candidates`:
+
+- **If Jira is connected** → live assignable users for `JIRA_PROJECT_KEY`
+  (`GET /rest/api/3/user/assignable/search`).
+- **Otherwise** → the static `TEAM_MEMBERS` roster in `app/agent/nodes/assign.py`:
+
+```python
+TEAM_MEMBERS = {
+    "Payments": ["payments-oncall@example.com", "alice@example.com", "bob@example.com"],
+    "Identity & Access": ["identity-team@example.com", "carol@example.com", "dan@example.com"],
+    "Reporting": ["reporting-team@example.com", "erin@example.com"],
+    "Data & Analytics": ["data-team@example.com", "frank@example.com"],
+    "Frontend": ["frontend-team@example.com", "grace@example.com", "heidi@example.com"],
+    "Triage": ["triage-lead@example.com"],
+}
+```
+
+If a team has **no candidates**, the node auto-assigns the team default and does not
+pause. Tune the roster by editing `TEAM_MEMBERS`. (The interrupt requires the graph to
+be compiled with a checkpointer — the API uses `MemorySaver`, which is in-memory, so a
+paused run is lost on restart.)
+
+---
+
 ## Jira integration (live)
 
-`notify` creates a real Jira **Bug** for each triaged defect; `flag_duplicate`
-creates a duplicate Bug and best-effort closes it. Configured entirely via the
-`.env` variables above (`JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN`,
-`JIRA_PROJECT_KEY`, `JIRA_ISSUE_TYPE`).
+`notify` **updates the source Jira issue** when the defect was fetched from Jira
+(`source_jira_key` set: a triage comment + priority), otherwise **creates a Bug**.
+`flag_duplicate` creates a duplicate Bug and best-effort closes it. Fetching a defect
+by ID uses `GET /jira/issue/{key}`. Configured via the `.env` variables above
+(`JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN`, `JIRA_PROJECT_KEY`, `JIRA_ISSUE_TYPE`).
 
 **Severity → Jira priority mapping** (`app/agent/nodes/notify.py`):
 

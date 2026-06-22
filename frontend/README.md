@@ -2,20 +2,34 @@
 
 A small React single-page app for submitting a defect and viewing the triage
 result (severity, priority, team/assignee, duplicate/regression flags, root-cause
-analysis, and the full audit trail).
+analysis, a Jira link, and the full audit trail).
 
-**Live streaming:** `POST /triage` streams Server-Sent Events, so the UI shows a
-**live log feed** — each node's breadcrumb appears the moment it runs (intake →
-check_duplicate → analyze → …) — above the final result, which renders when the
-stream completes.
+**What it does:**
+- **Fetch by Jira ID** — when Jira is connected (`GET /jira/status`), the form leads
+  with a Jira defect ID + Fetch button that auto-fills every field from the issue
+  (`GET /jira/issue/{key}`), including image attachments. Manual entry is the fallback.
+- **Live streaming** — `POST /triage` streams Server-Sent Events, so a **live log feed**
+  shows each node's breadcrumb the moment it runs, above the final result.
+- **Assignee pop-up** — when the graph pauses (`assignment_required`), a modal lists
+  candidate assignees; confirming calls `POST /triage/resume` and the same feed continues.
+- **Error modal & warning toasts** — a missing Gemini key / fatal quota error shows a
+  blocking modal; a non-fatal Jira failure shows a dismissible toast.
 
 > Note: a UI was out of the original v1 scope (`CLAUDE.md` guardrails) — this was
-> added as an explicit, approved extension. It's a thin client over the existing
-> `POST /triage` API; no backend logic lives here.
+> added as an explicit, approved extension. It's a thin client over the API; no
+> backend logic lives here.
 
 ## Stack
 - React 18 + Vite 5 (vanilla JS/JSX, no extra UI libraries)
-- Talks to the FastAPI backend via `POST /triage` and `GET /health`
+- Talks to the FastAPI backend via `POST /triage`, `POST /triage/resume`,
+  `GET /health`, `GET /jira/status`, `GET /jira/issue/{key}`
+
+## Components (`src/components/`)
+- `DefectForm.jsx` — Jira-ID fetch + manual fields + screenshot upload
+- `LogFeed.jsx` — live, streaming node-by-node log
+- `ResultPanel.jsx` — verdict, prominent root cause, Jira link, audit trail
+- `AssignmentModal.jsx` — human-in-the-loop assignee picker
+- `ErrorModal.jsx` — blocking fatal-error modal · `Toasts.jsx` — dismissible warnings
 
 ## Prerequisites
 - Node.js 18+ and npm (built/tested on Node 22, npm 10)
@@ -64,13 +78,16 @@ frontend/
 ├── package.json
 └── src/
     ├── main.jsx            # React root
-    ├── App.jsx             # state + layout (logs + result)
-    ├── api.js              # SSE stream reader for /triage
+    ├── App.jsx             # state + layout (logs, result, modals, toasts)
+    ├── api.js              # SSE reader + Jira/health helpers + resume
     ├── styles.css
     └── components/
-        ├── DefectForm.jsx  # input form (+ image→base64, sample loader)
-        ├── LogFeed.jsx     # live, streaming node-by-node log feed
-        └── ResultPanel.jsx # severity badges, banners, audit trail
+        ├── DefectForm.jsx       # Jira-ID fetch + manual fields + screenshot
+        ├── LogFeed.jsx          # live, streaming node-by-node log feed
+        ├── ResultPanel.jsx      # verdict, root cause, Jira link, audit trail
+        ├── AssignmentModal.jsx  # human-in-the-loop assignee picker
+        ├── ErrorModal.jsx       # blocking fatal-error modal
+        └── Toasts.jsx           # dismissible warning toasts
 ```
 
 ## Notes

@@ -4,7 +4,7 @@ How the test suite is structured, the patterns that keep it network-free, and
 what each test file proves.
 
 - **Runner:** `pytest`. Run from the repo root (the folder with `requirements.txt`).
-- **Status:** 57 unit tests passing. Integration tests require `GOOGLE_API_KEY`.
+- **Status:** 82 unit tests passing. Integration tests require `GOOGLE_API_KEY`.
 - **No API key required for unit tests.** Everything runs offline using mocks.
 
 ---
@@ -36,10 +36,12 @@ pytest -q
 | `tests/unit/test_duplicate.py` | `app/agent/nodes/duplicate.py` | All three verdicts: OPEN match → duplicate, CLOSED match → regression, no match → new. |
 | `tests/unit/test_analyze.py` | `app/agent/nodes/analyze.py` | JSON parsing (clean + fenced + malformed), regression prefix, image block assembly. |
 | `tests/unit/test_prioritize.py` | `app/agent/nodes/prioritize.py` | LLM severity, rule override, rule fallback, all severity→priority mappings. |
-| `tests/unit/test_assign.py` | `app/agent/nodes/assign.py` | Known components → correct team, unknown → Triage default. |
-| `tests/unit/test_side_effects.py` | `escalate.py`, `flag_dup.py`, `notify.py` | Tool stubs monkeypatched; asserts each node hits the right integration. |
-| `tests/unit/test_graph.py` | `app/agent/graph.py` | Full graph with mocked LLM + store; all 4 branches: new/duplicate/regression/critical-escalate. |
-| `tests/unit/test_api.py` | `app/api/routes.py` | Health endpoint; triage SSE stream (log events + result); quota error → error event. |
+| `tests/unit/test_assign.py` | `app/agent/nodes/assign.py` | Team routing; no-candidate auto-assign (forces the non-interrupt path). |
+| `tests/unit/test_side_effects.py` | `escalate.py`, `flag_dup.py`, `notify.py` | Jira create-vs-update branch, graceful degradation, warning surfacing. |
+| `tests/unit/test_jira_tool.py` | `app/tools/jira_tool.py` | `get_issue` mapping, ADF flatten, attachment download, `update_issue`, `browse_url`, `warning_for` (requests mocked). |
+| `tests/unit/test_assignees.py` | `app/tools/assignees.py` | Live Jira users vs. static fallback; error → fallback. |
+| `tests/unit/test_graph.py` | `app/agent/graph.py` | Full graph (mocked LLM/store); new/duplicate/regression/critical, **plus interrupt + resume** and "duplicate never reaches assign". |
+| `tests/unit/test_api.py` | `app/api/routes.py` | `/health`, `/jira/status`, `/jira/issue/{key}`; triage SSE (log/warning/result/error); `assignment_required` + `/triage/resume`. |
 | `tests/integration/test_full_triage.py` | Full live graph | 5 canonical scenarios against the real Gemini + seeded ChromaDB. Auto-skips without `GOOGLE_API_KEY`. |
 
 ---
@@ -88,6 +90,29 @@ class FakeEmbedder:
 store = VectorStore(embedder=FakeEmbedder(), client=chromadb.EphemeralClient())
 ```
 The embedder is injected so no real OpenAI or Gemini call is made.
+
+### Pattern 3: Mock Jira and the candidate lookup
+
+Jira calls (`requests`) are monkeypatched in `test_jira_tool.py`; the node tests
+monkeypatch the tool *functions* on the node module (e.g. `notify_mod.create_issue`,
+`notify_mod.add_comment`) to assert create-vs-update without touching the network.
+
+For the **human-in-the-loop** step, `assign_defect` calls `interrupt()`, which only
+works inside a running graph + checkpointer. So:
+- direct `assign_defect` tests force the **no-candidate** path
+  (`monkeypatch.setattr(assign, "get_team_candidates", lambda team, fallback=None: [])`)
+  to get the auto-assign branch;
+- the **interrupt + resume** flow is tested through the graph in `test_graph.py`:
+  ```python
+  graph = build_graph(MemorySaver())
+  cfg = {"configurable": {"thread_id": "t"}}
+  paused = graph.invoke(defect, config=cfg)          # returns {"__interrupt__": [...]}
+  assert graph.get_state(cfg).next == ("assign_defect",)
+  final = graph.invoke(Command(resume="bob@x.com"), config=cfg)
+  assert final["assigned_to"] == "bob@x.com"
+  ```
+- API tests use a `FakeGraph.astream` that yields `{"__interrupt__": (Interrupt(value=…),)}`
+  to assert the `assignment_required` event, and a separate fake for `/triage/resume`.
 
 ---
 

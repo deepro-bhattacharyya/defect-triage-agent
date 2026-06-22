@@ -113,12 +113,12 @@
   <!-- assign_defect -->
   <rect x="335" y="894" width="210" height="62" rx="12" fill="#e2e8f0" stroke="#64748b" filter="url(#shadow)"/>
   <text class="title" x="440" y="922" text-anchor="middle">assign_defect</text>
-  <text class="sub"   x="440" y="940" text-anchor="middle">component → team → developer</text>
+  <text class="sub"   x="440" y="940" text-anchor="middle">team → human picks assignee</text>
 
   <!-- notify -->
   <rect x="335" y="994" width="210" height="62" rx="12" fill="#ccfbf1" stroke="#0d9488" filter="url(#shadow)"/>
   <text class="title" x="440" y="1022" text-anchor="middle">notify</text>
-  <text class="sub"   x="440" y="1040" text-anchor="middle">Jira · Slack · email</text>
+  <text class="sub"   x="440" y="1040" text-anchor="middle">write back to Jira · Slack · email</text>
 
   <!-- END (main) -->
   <rect x="380" y="1098" width="120" height="44" rx="22" fill="#334155" filter="url(#shadow)"/>
@@ -168,7 +168,7 @@
   <text class="lg" x="1006" y="716">🔁  Duplicates skip the LLM</text>
   <text class="lg" x="1006" y="740">♻️  Regressions get full analysis</text>
   <text class="lg" x="1006" y="764">🚨  CRITICAL auto-pages on-call</text>
-  <text class="lg" x="1006" y="788">🧭  Auto-routes to owning team</text>
+  <text class="lg" x="1006" y="788">🧭  Routes to team; human picks owner</text>
   <text class="lg" x="1006" y="812">📝  Full audit trail per defect</text>
   <text class="lg" x="1006" y="836">🛡️  Rule fallback if LLM is down</text>
   <text class="lg" x="1006" y="860">🔌  Jira / Slack / email hooks</text>

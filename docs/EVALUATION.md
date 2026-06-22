@@ -5,15 +5,17 @@ How the agent is tested, the results observed, and how to reproduce them.
 ## How to run
 
 ```bash
-pytest tests/unit -q            # offline: mocks LLM + vector store, no key (56 tests)
+pytest tests/unit -q            # offline: mocks LLM + vector store + Jira, no key (82 tests)
 pytest tests/integration -q     # live: 5 scenarios through the real graph (needs GOOGLE_API_KEY)
 python scripts/evaluate.py      # live: metrics report (needs GOOGLE_API_KEY)
 ```
 
 **Manual / exploratory testing** also goes through the React UI (`frontend/`): build it
-(`npm run build`) and open `http://localhost:8000/`, or run `npm run dev`. The
-"Load sample (duplicate)" button exercises the no-LLM duplicate path, handy when the
-Gemini daily quota is exhausted. See `frontend/README.md`.
+(`npm run build`) and open `http://localhost:8000/`, or run `npm run dev`. Fetch a defect
+by Jira ID, watch the live log, pick an assignee in the pop-up, and confirm the result is
+written back to the Jira issue. The "Load sample (duplicate)" button exercises the no-LLM
+duplicate path (and skips the assignee pop-up), handy when the Gemini quota is exhausted.
+See `frontend/README.md`.
 
 The integration tests **skip automatically** when `GOOGLE_API_KEY` is unset (e.g. CI),
 and skip individual scenarios that hit a Gemini quota error instead of failing.

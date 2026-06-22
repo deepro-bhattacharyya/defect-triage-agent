@@ -72,6 +72,12 @@ GOOGLE_API_KEY=your-key-here
 
 `.env` is gitignored and will never be committed. Leave everything else at the defaults.
 
+**Optional — Jira (enables fetch-by-ID + write-back).** To triage real Jira issues, also set
+`JIRA_BASE_URL` (single `https://`!), `JIRA_EMAIL`, `JIRA_API_TOKEN`, and optionally
+`JIRA_PROJECT_KEY` (default `SCRUM`). Then verify with `python scripts/jira_check.py`.
+Without these, the UI falls back to manual entry and `notify` logs instead of writing to Jira.
+Full detail: [CONFIGURATION.md](CONFIGURATION.md).
+
 ---
 
 ## Step 5 — Corporate TLS (skip if not on a corporate network)
@@ -108,7 +114,7 @@ python -c "from app.tools.llm import get_llm; print('LLM client:', type(get_llm(
 pytest tests/unit -q
 ```
 
-Expected: `57 passed`.
+Expected: `82 passed`.
 
 ---
 
@@ -175,7 +181,7 @@ Vite proxies `/triage` and `/health` to the backend automatically.
 |---------|-----|
 | `CERTIFICATE_VERIFY_FAILED` | Do step 5. Regenerate the CA bundle if it keeps failing. |
 | `RuntimeError: GOOGLE_API_KEY is not set` | Check `.env` has the key; confirm venv is active (`(.venv)` in prompt). |
-| `57 tests` → some fail | Run from the repo root with venv active. Re-run `pip install -r requirements.txt`. |
+| `82 tests` → some fail | Run from the repo root with venv active. Re-run `pip install -r requirements.txt`. |
 | `npm install` fails with cert error | `$env:NODE_EXTRA_CA_CERTS="..\certs\corp-ca-bundle.pem"` then retry. |
 | Seed script fails | Step 5 not done, or quota hit (429). Duplicate path works without seeding, but matching won't. |
 | `POST /triage` returns `429` | Gemini free tier = 20 requests/day. Duplicate defects work regardless (no LLM). |

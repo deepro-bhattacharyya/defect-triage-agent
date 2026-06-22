@@ -1,8 +1,20 @@
-"""Unit tests for assign_defect — static component->team routing. No LLM, no key."""
+"""Unit tests for assign_defect — team routing + no-candidate auto-assign. No LLM, no key.
+
+assign_defect calls interrupt() when candidates exist, which only works inside a
+running graph. So these direct-call tests force the no-candidate path (auto-assign);
+the interrupt + resume flow is covered in test_graph.py.
+"""
 
 import pytest
 
+from app.agent.nodes import assign as assign_mod
 from app.agent.nodes.assign import assign_defect
+
+
+@pytest.fixture(autouse=True)
+def no_candidates(monkeypatch):
+    # No candidates → assign_defect auto-assigns the team default, no interrupt.
+    monkeypatch.setattr(assign_mod, "get_team_candidates", lambda team, fallback=None: [])
 
 
 @pytest.mark.parametrize(
@@ -35,7 +47,8 @@ def test_missing_component_falls_back_to_triage():
     assert out["assigned_team"] == "Triage"
 
 
-def test_appends_breadcrumb():
+def test_appends_breadcrumb_and_notes_no_candidates():
     out = assign_defect({"component": "checkout-service"})
     assert out["triage_notes"][0].startswith("[assign_defect]")
     assert "Payments" in out["triage_notes"][0]
+    assert "auto-assigned" in out["triage_notes"][0]

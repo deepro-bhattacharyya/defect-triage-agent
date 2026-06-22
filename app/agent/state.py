@@ -48,8 +48,13 @@ class TriageState(TypedDict, total=False):
     assigned_to: str
 
     # ---- Integration (notify / flag_duplicate) ----
-    jira_key: str         # the created Jira issue key, e.g. "SCRUM-1" (empty if none)
+    source_jira_key: str  # set when the defect was fetched FROM a Jira issue (Task 1)
+    jira_key: str         # the Jira issue acted on/created, e.g. "SCRUM-1" (empty if none)
+    jira_url: str         # browse URL for jira_key (empty if none)
 
     # ---- Audit ----
     triage_notes: Annotated[list[str], operator.add]
+    # Non-fatal warnings surfaced to the UI as dismissible toasts (e.g. a Jira
+    # write failed but triage still completed). Append-only.
+    warnings: Annotated[list[str], operator.add]
     status: str           # in_triage | duplicate | assigned | escalated | ...

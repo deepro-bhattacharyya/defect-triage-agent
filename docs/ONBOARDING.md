@@ -18,11 +18,12 @@
 6. [HANDOFF.md](HANDOFF.md) — current build status and ADLC phase log.
 
 The 30-second version: it's a **defect triage agent** — reachable via a React UI
-or `POST /triage` directly — that reads a bug report, checks whether it's already
-known (no LLM), asks Gemini for root cause and severity, picks the right team, and
-streams every step back to the UI in real time. **Jira integration is live** (creates
-a real Bug per triaged defect); Slack/email/on-call are still stubs, wired in and ready
-to be replaced with real credentials. No changes to any node code are needed to activate them.
+or `POST /triage` directly. You **fetch a defect from Jira by ID** (or enter it
+manually); it checks whether the bug is already known (no LLM), asks Gemini for root
+cause and severity, picks the right team, **pauses for a human to choose the
+assignee**, then **writes the result back to Jira** and streams every step to the UI
+in real time. **Jira is live** (fetch, write-back, create); Slack/email/on-call are
+still stubs, ready to be wired with real credentials.
 
 ---
 
@@ -33,31 +34,31 @@ All Python code lives under `app/`. The public entry point is
 
 | File / folder | Role |
 |---------------|------|
-| `app/agent/state.py` | `TriageState` — the shared dict every node reads and writes |
-| `app/agent/graph.py` | `build_graph()` — wires all nodes + edges + retry policies |
+| `app/agent/state.py` | `TriageState` — shared dict (incl. `source_jira_key`, `jira_key`, `jira_url`, `warnings`) |
+| `app/agent/graph.py` | `build_graph(checkpointer)` — wires nodes + edges + retries; API passes `MemorySaver()` |
 | `app/agent/nodes/intake.py` | Normalize input, validate image attachments |
 | `app/agent/nodes/duplicate.py` | Vector similarity search — duplicate / regression / new |
 | `app/agent/nodes/analyze.py` | LLM (Gemini) — root cause, category, component |
 | `app/agent/nodes/prioritize.py` | LLM — severity + priority; rule override + fallback |
-| `app/agent/nodes/assign.py` | Component → team → developer (static routing table) |
+| `app/agent/nodes/assign.py` | Component → team, then `interrupt()` for human assignee pick |
 | `app/agent/nodes/escalate.py` | Page on-call for CRITICAL (stub — logs only) |
-| `app/agent/nodes/flag_dup.py` | Link to parent ticket, close as duplicate (stub) |
-| `app/agent/nodes/notify.py` | Creates a Jira Bug (live) + Slack + email (stubs) |
+| `app/agent/nodes/flag_dup.py` | Create + close a duplicate Bug in Jira (live) |
+| `app/agent/nodes/notify.py` | Update the source Jira issue, or create a Bug (live) + Slack/email (stubs) |
 | `app/tools/llm.py` | `get_llm()` — Gemini 2.5 Flash (dev) / Claude Sonnet 4.6 (prod) |
 | `app/tools/vector_store.py` | ChromaDB wrapper — `similarity_search_with_score` |
 | `app/tools/certs.py` | Corporate-TLS bootstrap (auto-detects `certs/corp-ca-bundle.pem`) |
 | `app/tools/parsing.py` | Defensive JSON extraction from LLM output |
-| `app/tools/jira_tool.py` | Jira integration — **live** (REST v3: create issue, comment, transition) |
-| `app/tools/slack_tool.py` | Slack integration **stub** |
-| `app/tools/email_tool.py` | Email integration **stub** |
-| `app/tools/oncall_tool.py` | On-call paging **stub** |
-| `app/api/routes.py` | FastAPI: `POST /triage` (SSE streaming), `GET /health`, serves React UI |
+| `app/tools/jira_tool.py` | Jira REST v3 — **live**: `get_issue`, `create_issue`, `update_issue`, `add_comment`, `transition_to`, `get_jira_status`, `warning_for` |
+| `app/tools/assignees.py` | Candidate assignee lookup (live Jira assignable users, else static roster) |
+| `app/tools/slack_tool.py` / `email_tool.py` / `oncall_tool.py` | Slack / email / on-call **stubs** |
+| `app/api/routes.py` | FastAPI: `POST /triage` + `/triage/resume` (SSE), `GET /health`, `GET /jira/status`, `GET /jira/issue/{key}`, serves React UI |
 | `scripts/seed_vector_store.py` | One-time loader: `seed_backlog.json` → ChromaDB |
+| `scripts/jira_check.py` | Jira connectivity/discovery check (projects, issue types, priorities) |
 | `scripts/evaluate.py` | Metrics runner: severity accuracy, dup precision, latency |
-| `tests/unit/` | Per-node tests with mocked LLM + store (57 tests, no key needed) |
+| `tests/unit/` | Per-node + tool + API tests, mocked (82 tests, no key needed) |
 | `tests/integration/` | Full graph, live Gemini (5 canonical scenarios) |
 | `tests/fixtures/` | `sample_defects.json` (5 scenarios) + `seed_backlog.json` |
-| `frontend/` | React 18 + Vite UI — `src/api.js`, `App.jsx`, `components/` |
+| `frontend/` | React 18 + Vite UI — `src/api.js`, `App.jsx`, `components/` (DefectForm, LogFeed, ResultPanel, AssignmentModal, ErrorModal, Toasts) |
 | `docs/` | All documentation (you are here) |
 
 ---
@@ -76,8 +77,16 @@ All Python code lives under `app/`. The public entry point is
   degrade gracefully.
 - *"How does the streaming work?"* → `app/api/routes.py` (`astream`) and
   `frontend/src/api.js` (`triageDefectStream`). See [API_REFERENCE.md](API_REFERENCE.md).
-- *"How does Jira ticket creation work?"* → `app/tools/jira_tool.py` (real REST v3).
-  Verify your connection with `python scripts/jira_check.py`. Config in [CONFIGURATION.md](CONFIGURATION.md).
+- *"How does Jira work (fetch / create / write-back)?"* → `app/tools/jira_tool.py`
+  (`get_issue` to fetch, `create_issue`/`update_issue`/`add_comment` to write).
+  `notify` updates the source issue when `source_jira_key` is set, else creates a Bug.
+  Verify connectivity with `python scripts/jira_check.py`. Config in [CONFIGURATION.md](CONFIGURATION.md).
+- *"Why did a pop-up ask me to pick an assignee?"* → `app/agent/nodes/assign.py`
+  calls `interrupt()` with candidates from `app/tools/assignees.py`. The API emits
+  `assignment_required`; the UI resumes via `POST /triage/resume`. See [DATA_FLOW.md](DATA_FLOW.md).
+- *"Why a warning toast / blocking error modal?"* → `jira_tool.warning_for` (non-fatal
+  Jira failures → `warning` SSE) and the Gemini-quota `error` SSE in `routes.py`. UI in
+  `frontend/src/components/{Toasts,ErrorModal}.jsx`.
 - *"How do I wire real Slack/email?"* → `app/tools/slack_tool.py`,
   `app/tools/email_tool.py` — each has a clear `# TODO` where the HTTP call goes.
 - *"How is a test written for a node?"* → `tests/unit/test_intake.py` or

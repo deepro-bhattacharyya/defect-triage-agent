@@ -12,6 +12,11 @@ Assembles the nodes into the flow defined in docs/PROJECT_PLAN.md:
 
 check_duplicate runs BEFORE any LLM call so confirmed duplicates skip analysis.
 analyze_defect and prioritize get RetryPolicy(max_attempts=3) since they call the LLM.
+
+assign_defect pauses via interrupt() for human assignee selection, so the graph must
+be compiled with a checkpointer (the API passes MemorySaver()); every run then needs
+a config with configurable.thread_id. Compiling without one (tests of the
+straight-through path) still works as long as assign_defect finds no candidates.
 """
 
 from typing import Literal
@@ -40,7 +45,7 @@ def route_severity(state: TriageState) -> Literal["escalate", "assign_defect"]:
     return "escalate" if state.get("severity") == "CRITICAL" else "assign_defect"
 
 
-def build_graph():
+def build_graph(checkpointer=None):
     builder = StateGraph(TriageState)
 
     builder.add_node("intake_defect", intake_defect)
@@ -66,4 +71,4 @@ def build_graph():
     builder.add_edge("notify", END)
     builder.add_edge("flag_duplicate", END)
 
-    return builder.compile()
+    return builder.compile(checkpointer=checkpointer)

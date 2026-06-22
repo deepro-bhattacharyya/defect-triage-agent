@@ -53,12 +53,15 @@ def test_flag_duplicate_degrades_when_jira_down(monkeypatch):
     assert out["jira_key"] == ""
 
 
-def test_notify_creates_jira_and_notifies(monkeypatch):
+def test_notify_creates_jira_when_not_sourced(monkeypatch):
     created, slack, email = [], [], []
     monkeypatch.setattr(notify_mod, "create_issue",
                         lambda **kw: created.append(kw) or {"ok": True, "key": "SCRUM-10"})
+    monkeypatch.setattr(notify_mod, "add_comment",
+                        lambda *a, **k: (_ for _ in ()).throw(AssertionError("should not update")))
     monkeypatch.setattr(notify_mod, "post_message", lambda c, t: slack.append((c, t)) or {"ok": True})
     monkeypatch.setattr(notify_mod, "send_email", lambda to, s, b: email.append(to) or {"ok": True})
+    monkeypatch.setattr(notify_mod, "browse_url", lambda k: f"https://j/browse/{k}" if k else "")
 
     out = notify(
         {
@@ -68,16 +71,52 @@ def test_notify_creates_jira_and_notifies(monkeypatch):
             "assigned_team": "Payments",
             "assigned_to": "payments-oncall@example.com",
             "component": "checkout-service",
+            "source_jira_key": "",   # NOT sourced from Jira → create
         }
     )
 
     assert out["status"] == "notified"
     assert out["jira_key"] == "SCRUM-10"
+    assert out["jira_url"] == "https://j/browse/SCRUM-10"
     assert created and created[0]["priority"] == "Highest"   # CRITICAL -> Highest
     assert "[CRITICAL]" in created[0]["summary"]
     assert len(slack) == 1 and slack[0][0] == "#defect-triage"
     assert email == ["payments-oncall@example.com"]
-    assert "SCRUM-10" in out["triage_notes"][0]
+    assert "created Jira SCRUM-10" in out["triage_notes"][0]
+
+
+def test_notify_updates_existing_when_sourced_from_jira(monkeypatch):
+    commented, updated = [], []
+    monkeypatch.setattr(notify_mod, "add_comment",
+                        lambda k, body: commented.append((k, body)) or {"ok": True})
+    monkeypatch.setattr(notify_mod, "update_issue",
+                        lambda k, fields: updated.append((k, fields)) or {"ok": True})
+    monkeypatch.setattr(notify_mod, "create_issue",
+                        lambda **kw: (_ for _ in ()).throw(AssertionError("should not create")))
+    monkeypatch.setattr(notify_mod, "post_message", lambda c, t: {"ok": True})
+    monkeypatch.setattr(notify_mod, "send_email", lambda to, s, b: {"ok": True})
+    monkeypatch.setattr(notify_mod, "browse_url", lambda k: f"https://j/browse/{k}" if k else "")
+
+    out = notify(
+        {
+            "defect_id": "SCRUM-42",
+            "severity": "HIGH",
+            "title": "Regression in auth",
+            "category": "Auth",
+            "component": "auth-service",
+            "root_cause": "token race",
+            "assigned_team": "Identity & Access",
+            "assigned_to": "identity-team@example.com",
+            "source_jira_key": "SCRUM-42",   # sourced from Jira → update
+        }
+    )
+
+    assert out["status"] == "notified"
+    assert out["jira_key"] == "SCRUM-42"
+    assert commented and commented[0][0] == "SCRUM-42"
+    assert "Root cause: token race" in commented[0][1]
+    assert updated and updated[0][1] == {"priority": {"name": "High"}}  # HIGH -> High
+    assert "updated Jira SCRUM-42" in out["triage_notes"][0]
 
 
 def test_notify_degrades_when_jira_down(monkeypatch):
@@ -90,3 +129,16 @@ def test_notify_degrades_when_jira_down(monkeypatch):
     assert out["status"] == "notified"     # still finishes
     assert out["jira_key"] == ""
     assert "Jira not configured" in out["triage_notes"][0]
+    assert "warnings" not in out           # "not configured" is expected → no toast
+
+
+def test_notify_emits_warning_on_jira_auth_failure(monkeypatch):
+    # create_issue fails with a real auth error (401) → non-fatal warning surfaced
+    monkeypatch.setattr(notify_mod, "create_issue", lambda **kw: {"ok": False, "status": 401})
+    monkeypatch.setattr(notify_mod, "post_message", lambda c, t: {"ok": True})
+    monkeypatch.setattr(notify_mod, "send_email", lambda to, s, b: {"ok": True})
+
+    out = notify({"defect_id": "DEF-1", "severity": "LOW", "title": "x",
+                  "assigned_team": "Frontend", "assigned_to": "f@example.com"})
+    assert out["status"] == "notified"     # still finishes (non-fatal)
+    assert out["warnings"] and "credentials" in out["warnings"][0].lower()

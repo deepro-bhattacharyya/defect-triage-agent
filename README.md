@@ -4,14 +4,17 @@
 one-paragraph overview; every other topic has exactly one home, linked below.
 
 > **What it is.** An LLM-powered LangGraph agent that automatically reviews,
-> prioritizes, and routes incoming software bug reports. It ingests a defect,
-> checks for duplicates/regressions via vector similarity, uses Google Gemini to
-> analyze root cause and severity, assigns it to the right team, **creates a Jira
-> ticket**, and notifies stakeholders — turning a ~45-minute manual triage into a
-> sub-2-minute automated one. Includes a React UI with live step-by-step streaming.
+> prioritizes, and routes incoming software bug reports. You **fetch a defect from
+> Jira by ID** (or enter it manually); it checks for duplicates/regressions via
+> vector similarity, uses Google Gemini to analyze root cause and severity, routes
+> it to the right team, **pauses for a human to pick the assignee**, then **writes
+> the result back to Jira** (updating the source issue, or creating a Bug) and
+> notifies stakeholders — turning a ~45-minute manual triage into a sub-2-minute
+> one. Includes a React UI with live step-by-step streaming.
 >
-> **ADLC Status:** Phases 1–5 complete (Planning → Design → Development →
-> Testing → Deployment). Full phase log: [docs/HANDOFF.md](docs/HANDOFF.md).
+> **ADLC Status:** Phases 1–5 complete (Planning → Design → Development → Testing →
+> Deployment); Phase 6 (UI) and Phase 7 (Jira integration, streaming, human-in-the-loop
+> assignment) done. **82 unit tests passing.** Full phase log: [docs/HANDOFF.md](docs/HANDOFF.md).
 
 ---
 
@@ -74,7 +77,8 @@ Short path: **ONBOARDING → INSTALL → RUNBOOK**.
 | **Phase 1 — Planning** | Requirements, problem statement, tool selection, ADLC plan | ✅ Complete |
 | **Phase 2 — Design** | State schema (`TriageState`), LangGraph flow, node contracts, API design | ✅ Complete |
 | **Phase 3 — Development** | All 8 triage nodes, vector store, LLM client, FastAPI + SSE streaming, React UI | ✅ Complete |
-| **Phase 4 — Testing** | 57 unit tests (mocked LLM/store), 5-scenario integration tests, evaluation script | ✅ Complete |
+| **Phase 4 — Testing** | 82 unit tests (mocked LLM/store/Jira), 5-scenario integration tests, evaluation script | ✅ Complete |
 | **Phase 5 — Deployment** | Local deployment via uvicorn, backend-served React UI, env-based config | ✅ Complete |
-| **Phase 6 — Integrations** | **Jira (live — creates a Bug per defect)**; Slack/email/on-call still stubs | 🔵 In progress |
-| **Phase 7 — Future** | Real Slack/email/on-call, Pinecone cloud store, prod Claude Sonnet 4.6 | ⏳ Planned |
+| **Phase 6 — UI & streaming** | React UI, SSE live log feed, error modal / warning toasts | ✅ Complete |
+| **Phase 7 — Integrations & HITL** | Jira live (fetch-by-ID, write-back, create); human-in-the-loop assignee selection (interrupt/resume) | ✅ Complete |
+| **Phase 8 — Future** | Real Slack/email/on-call, Pinecone cloud store, prod Claude Sonnet 4.6 | ⏳ Planned |

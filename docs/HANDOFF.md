@@ -1,6 +1,7 @@
 # DefectTriageBot — Build Handoff (Phase-by-Phase)
 
-> This is your implementation checklist. The project is broken into **6 phases**,
+> This is your implementation checklist. The project is broken into **7 phases**
+> (1–5 the core ADLC build, 6 testing + UI, 7 integrations & human-in-the-loop),
 > each made of small, testable steps. Do **one step at a time**, run its test, then
 > move on. Don't build everything in one shot.
 >
@@ -37,6 +38,14 @@
 | 6 | 6.1 | Integration tests (5 scenarios) | ✅ |
 | 6 | 6.2 | Full suite + metrics report | 🟦 |
 | 6 | 6.3 | React frontend (`frontend/`) + backend integration | ✅ |
+| 7 | 7.1 | Jira live: create/update issue (`jira_tool`, `notify`/`flag_dup`) | ✅ |
+| 7 | 7.2 | SSE streaming on `POST /triage` + live log feed | ✅ |
+| 7 | 7.3 | Fetch defect FROM Jira by ID + write-back to source issue | ✅ |
+| 7 | 7.4 | Error modal (Gemini) + warning toasts (Jira) + load-time checks | ✅ |
+| 7 | 7.5 | Human-in-the-loop assignee selection (interrupt + `/triage/resume`) | ✅ |
+
+> **Test suite: 82 unit tests passing** (offline, mocked LLM/store/Jira), ruff clean.
+> Phases 1–7 implemented; only 6.2's full *live* metrics run is gated on Gemini quota.
 
 ---
 
@@ -372,6 +381,45 @@ UI returns the rendered verdict (verified with the duplicate sample — works wi
 
 ---
 
+## Phase 7 — Integrations & Human-in-the-loop (post-v1 extensions)
+
+All verified live against a real Jira Cloud site and Gemini.
+
+### Step 7.1 — Jira live (create / update)
+`app/tools/jira_tool.py` uses Jira REST v3: `create_issue`, `update_issue`, `add_comment`,
+`transition_to`. `notify` creates a Bug (severity→priority); `flag_duplicate` creates +
+closes a duplicate Bug. All best-effort (never raise). Config: `JIRA_*` in `.env`; verify
+with `python scripts/jira_check.py`.
+
+### Step 7.2 — SSE streaming
+`POST /triage` streams Server-Sent Events via `_graph.astream(stream_mode=["updates","values"])`
+— a `log` event per node, then `result`. The UI renders a live, step-by-step log feed.
+
+### Step 7.3 — Fetch FROM Jira + write-back
+Primary input is now a **Jira defect ID** → `GET /jira/issue/{key}` maps the issue (ADF
+description flattened, image attachments pulled) and auto-fills the form. When a defect
+originated from Jira (`source_jira_key`), `notify` **updates that issue** (comment +
+priority) instead of creating a new Bug. Manual entry is the fallback when Jira is down
+(`GET /jira/status`).
+
+### Step 7.4 — Error / warning surfacing
+Fatal Gemini quota → SSE `error` (blocking modal). Jira auth/quota/network failures →
+non-fatal SSE `warning` (dismissible toast); triage still completes. On load the UI calls
+`/health` (missing `GOOGLE_API_KEY` → error modal) and `/jira/status`.
+
+### Step 7.5 — Human-in-the-loop assignee selection
+Graph compiled with `MemorySaver`. `assign_defect` gathers candidates
+(`app/tools/assignees.py`: live Jira assignable users, else `TEAM_MEMBERS` roster) and
+`interrupt()`s. API emits `assignment_required`; `POST /triage/resume` continues via
+`Command(resume=<assignee>)`. No candidates → auto-assign (no pause). Duplicates never reach
+assign, so the pop-up never fires there.
+
+**Test / Done when:** ✅ 82 unit tests pass (incl. `test_jira_tool`, `test_assignees`,
+interrupt+resume in `test_graph`, `assignment_required`/`/triage/resume` in `test_api`).
+Live-verified: fetched SCRUM-9, wrote back to it, paused→resumed creating SCRUM-35.
+
+---
+
 ## Dependency Map (what blocks what)
 
 ```
@@ -397,12 +445,16 @@ Phase 6  integration tests ──► metrics report
    │
    ▼
 6.3      React frontend ──► served by the api (needs the /triage endpoint from 5.2)
+   │
+   ▼
+Phase 7  Jira live + SSE streaming + Jira fetch/write-back + error UX + human-in-the-loop
+         (extends the api/graph/nodes/frontend; needs the full Phase 5 graph + UI)
 ```
 
 You *can* build the nodes in Phase 3/4 in any order since they're independent, but the
 graph (5.1) can't be wired until every node exists. Build bottom-up; the graph snaps
 together cleanly at the end. The frontend (6.3) only needs the `/triage` endpoint, so it
-slots in after Phase 5.
+slots in after Phase 5. Phase 7 layers integrations on top of the finished pipeline.
 
 ---
 
